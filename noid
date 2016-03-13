@@ -284,6 +284,8 @@ class NoidDo
 
     public function command($args = array())
     {
+        global $stderr;
+
         # Any remaining args should form a noid command.
         # Look at the command part (if any) now, and complain about
         # a non-existent database unless the command is "dbcreate".
@@ -299,7 +301,7 @@ class NoidDo
                 && $command != 'help'
             ) {
             # if the database doesn't exist when it needs to
-            fprint($stderr, "error: no database ($dbname) -- use dbcreate?" . PHP_EOL . PHP_EOL);
+            fwrite($stderr, sprintf('error: no database (%s) -- use dbcreate?', $dbname) . PHP_EOL . PHP_EOL);
             $this->usage(1, 1, 'intro');
             return 0;
         }
@@ -347,21 +349,24 @@ class NoidDo
      */
     public function bind($how, $id, $elem, $value)
     {
-        my $validate = 1;
-        my $noid = Noid::dbopen($dbname, 0);
-        if (! $noid) {
-            print STDERR Noid::errmsg($noid);
-            return(0);
+        global $stderr;
+
+        $validate = 1;
+        $noid = Noid::dbopen($dbname, 0);
+        if (!$noid) {
+            fwrite($stderr, Noid::errmsg($noid));
+            return 0;
         }
-        my $report;
+        $report = null;
         ! defined($elem) and
             $elem = "";
         if ($elem eq ":") {    # expect name/value pairs up to blank line
-            defined($value) and
-                print(STDERR "Why give a value ($value) with an "
-                    . qq@element "$elem"?\n@),
-                Noid::dbclose($noid),
-                return(0);
+            if (defined($value)) {
+                fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
+                    $value, $elem) . PHP_EOL);
+                Noid::dbclose($noid);
+                return 0;
+            }
 
             # To slurp paragraph, apparently safest to use local $/, which
             local $/;            # disappears when scope exits.
@@ -390,25 +395,27 @@ class NoidDo
                 ;
                 $report = Noid::bind($noid, $contact, $validate,
                     $how, $id, $elem, $value);
-                ! defined($report) and
-                    print(STDERR $report, "\n"),
-                    usage(1, 1, "bind"),
+                if (! defined($report)) {
+                    fwrite($stderr, $report . PHP_EOL);
+                    usage(1, 1, 'bind');
                     # yyy how/who should log failures in "hard" case
-                or
-                    $bound++,
-                    print($report, "\n"),
-                ;
+                }
+                else {
+                    $bound++;
+                    print($report . PHP_EOL);
+                }
             }
             # yyy summarize for log $total and $bound
             Noid::dbclose($noid);
             return(defined($report) ? 1 : 0);
         }
         elsif ($elem eq ":-") {        # expect name/value to be rest of file
-            defined($value) and
-                print(STDERR "Why give a value ($value) with an "
-                    . qq@element "$elem"?\n@),
-                Noid::dbclose($noid),
-                return(0);
+            if (defined($value)) {
+                fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
+                    $value, $elem) . PHP_EOL);
+                Noid::dbclose($noid);
+                return 0;
+            }
     #        while (<STDIN>) {
     #            next if /^#/ || /^\s*\n/;
     #            last;        # end at first non-blank, non-comment
@@ -417,7 +424,7 @@ class NoidDo
     #        ! defined($_) || ! s/^(\w+)\s*:\s*// and
     #            Noid::addmsg($noid, "error: $id no element to bind."),
     #            Noid::dbclose($noid),
-    #            return(0);
+    #            return 0;
     #        $elem = $1;
     #        $value = $_;
     #        # To slurp file, apparently safest is to use local $/, which
@@ -445,19 +452,17 @@ class NoidDo
 
             # If we don't have any lines, there's a problem.
             if (scalar(@input_lines) == 0) {
-                print STDERR "error:  no non-blank, non-comment ",
-                    "input.\n";
+                fwrite($stderr, 'error:  no non-blank, non-comment input.' . PHP_EOL);
                 Noid::dbclose($noid);
-                return(0);
-                }
+                return 0;
+            }
 
             # There must be an element and a colon on the first line.
             unless ($input_lines[0] =~ /^\s*(\w+)\s*:\s*(.*)$/) {
-                print STDERR "error:  missing element or colon on ",
-                    "first non-blank, non-comment line.\n";
+                fwrite($stderr, 'error:  missing element or colon on first non-blank, non-comment line.' . PHP_EOL);
                 Noid::dbclose($noid);
-                return(0);
-                }
+                return 0;
+            }
 
             # Save the element, and any part of the value that there
             # might be on the first line.
@@ -483,19 +488,18 @@ class NoidDo
         # yyy eg, :file:Path
         # yyy eg, ":xml",
         elsif ($elem =~ /^:/) {
-            print(STDERR qq@Binding to element syntax "$elem" @
-                . "not supported.\n");
+            fwrite($stderr, sprintf('Binding to element syntax "%s" not supported.', $elem) . PHP_EOL);
             Noid::dbclose($noid);
-            return(0);
+            return 0;
         }
-        $report = Noid::bind($noid, $contact, $validate,
-                $how, $id, $elem, $value);
-        ! defined($report) and
-            print(STDERR Noid::errmsg($noid)),
-            usage(0, 1, "bind")
-        or
-            print($report, "\n")
-        ;
+        $report = Noid::bind($noid, $contact, $validate, $how, $id, $elem, $value);
+        if (! defined($report)) {
+            fwrite($stderr, Noid::errmsg($noid));
+            usage(0, 1, 'bind');
+        }
+        else {
+            print($report . PHP_EOL);
+        }
         # yyy make sure return(0)'s do dbclose...
         Noid::dbclose($noid);
         return(defined($report) ? 1 : 0);
@@ -517,10 +521,10 @@ class NoidDo
                 $naan, $naa, $subnaa);
         if (! $dbreport) {
             print Noid::errmsg(), "\n";
-            return(0);
+            return 0;
         }
         print $dbreport, "\n";
-        return(1);
+        return 1;
     }
 
     /**
@@ -536,11 +540,11 @@ class NoidDo
         my $noid = Noid::dbopen($dbname, DB_RDONLY);
         if (! $noid) {
             print Noid::errmsg($noid);
-            return(0);
+            return 0;
         }
         Noid::dbinfo($noid, $level);
         Noid::dbclose($noid);
-        return(1);
+        return 1;
     }
 
     /**
@@ -577,20 +581,25 @@ class NoidDo
      */
     protected function _getfetch($verbose, $id, $elems)
     {
+        global $stderr;
+
         my $noid = Noid::dbopen($dbname, DB_RDONLY);
         if (! $noid) {
-            print STDERR Noid::errmsg($noid);
-            return(0);
+            fwrite($stderr, Noid::errmsg($noid));
+            return 0;
         }
-        my $fetched = Noid::fetch($noid, $verbose, $id, @elems);
-        ! defined($fetched) and
-            print(STDERR Noid::errmsg($noid))
-        or
-            print($fetched),
-            $verbose && print("\n")
-        ;
+        my $fetched = Noid::fetch($noid, $verbose, $id, $elems);
+        if (! defined($fetched)) {
+            fwrite($stderr, Noid::errmsg($noid));
+        }
+        else {
+            print($fetched);
+            if ($verbose) {
+                print(PHP_EOL);
+            }
+        }
         Noid::dbclose($noid);
-        return(1);
+        return 1;
     }
 
     /**
@@ -631,20 +640,22 @@ class NoidDo
      */
     public function hold($on_off, $ids)
     {
+        global $stderr;
+
         my $noid = Noid::dbopen($dbname, 0);
         if (! $noid) {
-            print STDERR Noid::errmsg($noid);
-            return(0);
+            fwrite($stderr, Noid::errmsg($noid));
+            return 0;
         }
         if (! Noid::hold($noid, $contact, $on_off, @ids)) {
-            print(STDERR Noid::errmsg($noid));
+            fwrite($stderr, Noid::errmsg($noid));
             usage(1, 1, "hold");
             Noid::dbclose($noid);
-            return(0);
+            return 0;
         }
         print(Noid::errmsg($noid), "\n");    # no error message at all
         Noid::dbclose($noid);
-        return(1);
+        return 1;
     }
 
     /**
@@ -671,34 +682,36 @@ class NoidDo
      */
     public function mint($n, $elem, $value, $pepper = false)
     {
+        global $stderr;
+
         if (defined($pepper)) {
-            print STDERR
-                "The peppermint command is not implemented yet.\n";
-            return(0);
+            fwrite($stderr,
+                'The peppermint command is not implemented yet.' . PHP_EOL);
+            return 0;
         }
         if (! defined($n) || $n !~ /^\d+$/) {
-            print STDERR "Argument error: expected positive integer, got ",
-                (defined($n) ? qq@"$n"@ : "nothing"), "\n";
+            fwrite($stderr, sprintf('Argument error: expected positive integer, got %s',
+                defined($n) ? $n : 'nothing') . PHP_EOL);
             usage(1, 1, "mint");
-            return(0);
+            return 0;
         }
         my $noid = Noid::dbopen($dbname, 0);
         if (! $noid) {
             print Noid::errmsg($noid);
-            return(0);
+            return 0;
         }
         my $id;
         while ($n--) {
             if (! defined($id = Noid::mint($noid, $contact, $pepper))) {
-                print STDERR Noid::errmsg($noid);
+                fwrite($stderr, Noid::errmsg($noid));
                 Noid::dbclose($noid);
-                return(0);
+                return 0;
             }
-            print "id: $id\n";
+            print "id: $id" . PHP_EOL;
         }
         Noid::dbclose($noid);
         print "\n";
-        return(1);
+        return 1;
     }
 
     /**
@@ -710,17 +723,19 @@ class NoidDo
      */
     public function note($key, $value)
     {
+        global $stderr;
+
         if (! defined($key) || ! defined($value)) {
-            print STDERR
-                "You must supply a key and a value.\n";
+            fwrite($stderr,
+                'You must supply a key and a value.' . PHP_EOL);
             usage(1, 1, "note");
-            return(0);
+            return 0;
         }
         my $noid = Noid::dbopen($dbname, 0);
         ! Noid::note($noid, $contact, $key, $value)
             and print Noid::errmsg($noid);
         Noid::dbclose($noid);
-        return(1);
+        return 1;
     }
 
     /**
@@ -732,20 +747,23 @@ class NoidDo
      */
     public function queue($when, $ids)
     {
+        global $stderr;
+
         my $noid = Noid::dbopen($dbname, 0);
         if (! $noid) {
-            print STDERR Noid::errmsg($noid);
-            return(0);
+            fwrite($stderr, Noid::errmsg($noid));
+            return 0;
         }
         my @queued = Noid::queue($noid, $contact, $when, @ids);
         my $retval;
-        ! @queued and
-            $retval = 0,
-            print(STDERR Noid::errmsg($noid), "\n"),
-        1 or
-            $retval = 1,
-            print(join("\n", @queued), "\n"),
-        ;
+        if (empty($queued)) {
+            $retval = 0;
+            fwrite($stderr, Noid::errmsg($noid . PHP_EOL));
+        }
+        else {
+            $retval = 1;
+            print(join(PHP_EOL, $queued) . PHP_EOL);
+        }
         my $n = scalar(grep(! /^error:/, @queued));
         print("note: $n identifier", ($n == 1 ? "" : "s"), " queued\n");
         Noid::dbclose($noid);
@@ -761,17 +779,20 @@ class NoidDo
      */
     public function validate($template, $ids)
     {
+        global $stderr;
+
         my $noid = Noid::dbopen($dbname, DB_RDONLY);
         if (! $noid) {
             print Noid::errmsg($noid);
-            return(0);
+            return 0;
         }
         my @valids = Noid::validate($noid, $template, @ids);
-        ! @valids and
-            print(STDERR Noid::errmsg($noid)),
-            Noid::dbclose($noid),
-            usage(1, 1, "validate"),
-            return(0);
+        if (empty($valids)) {
+            fwrite($stderr, Noid::errmsg($noid));
+            Noid::dbclose($noid);
+            usage(1, 1, 'validate');
+            return 0;
+        }
 
         my @iderrs = grep(/^error:/, @valids);
         print($_, "\n")
@@ -804,12 +825,14 @@ class NoidDo
      */
     public function usage($in_error, $brief, $topic)
     {
+        global $stderr;
+
         ! defined($in_error) and
             $in_error = 1;        # default is to treat as error
         $in_error and
             $| = 1;            # flush any pending output
         my $out =            # where to send output
-            ($in_error ? *STDERR : *STDOUT);
+            $in_error ? $stderr : STDOUT;
         ! defined($brief) and
             $brief = 1;        # default is to be brief
         $topic ||= "intro";
@@ -842,7 +865,7 @@ class NoidDo
                 ;
             }
             print "\n\n";
-            return(1);
+            return 1;
         }
         # If we get here, @blurbs names one story.
         my $blurb = shift @blurbs;
@@ -869,7 +892,7 @@ For more information try "perldoc noid" or "noid help Command".  Summary:
 @);
             $brief and
                 print("\n\n"),
-                return(1);
+                return 1;
             for $t (@valid_commands) {
                 $i = $info{"$t/brief"};
                 ! defined($i) || ! $i and
@@ -880,7 +903,7 @@ For more information try "perldoc noid" or "noid help Command".  Summary:
 If invoked as "noidu...", output is formatted for a web client.  Give Command
 as "-" to run a block of noid Commands read from stdin or from POST data.@;
             print "\n\n";
-            return(1);
+            return 1;
         }
         #elsif $blurb eq "dbcreate" and print $out $info{$blurb}
         #or
@@ -890,11 +913,11 @@ as "-" to run a block of noid Commands read from stdin or from POST data.@;
         $t = $info{$blurb};
         if (! defined($t) || ! $t) {
             print $out qq@Sorry: no information on "$blurb".\n\n@;
-            return(1);
+            return 1;
         }
         bprint $out, $t;
         print "\n";
-        return(1);
+        return 1;
 
         # yyy fix these verbose messages
 
@@ -938,7 +961,7 @@ initializes a generator of sequential numbers.  Instead of seemingly random
 creates sequentially generated number.  Use '0s'
 to indicate a constant width number padded on the left with zeroes.
 @;
-        return(1);
+        return 1;
     }
 
     /**
@@ -1061,7 +1084,7 @@ q@
         'validate' =>
 q@@,
         );
-        return(1);
+        return 1;
     }
 
     /**
