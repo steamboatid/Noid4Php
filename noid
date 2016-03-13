@@ -479,7 +479,7 @@ class NoidDo
             }
 
             # There must be an element and a colon on the first line.
-            if (!preg_match('/^\s*(\w+)\s*:\s*(.*)$/', $input_lines[0])) {
+            if (!preg_match('/^\s*(\w+)\s*:\s*(.*)$/', $input_lines[0], $matches)) {
                 fwrite($stderr, 'error:  missing element or colon on first non-blank, non-comment line.' . PHP_EOL);
                 Noid::dbclose($noid);
                 return 0;
@@ -487,16 +487,16 @@ class NoidDo
 
             # Save the element, and any part of the value that there
             # might be on the first line.
-            $elem = $1;
-            $value = $2;
+            $elem = $matches[1];
+            $value = $matches[2];
 
             # Remove the first line from the array.
-            shift @input_lines;
+            array_shift($input_lines);
 
             # Append any additional lines to the value.
-            foreach (@input_lines) {
-                $value .= PHP_EOL . $_;
-                }
+            foreach ($input_lines as $v) {
+                $value .= PHP_EOL . $v;
+            }
 
             # Put on the final newline.
             $value .= PHP_EOL;
@@ -578,7 +578,7 @@ class NoidDo
      */
     public function fetch($id, $elems)
     {
-        return getfetch(1, $id, $elems);
+        return $this->_getfetch(1, $id, $elems);
     }
 
     /**
@@ -590,7 +590,7 @@ class NoidDo
      */
     public function get($id, $elems)
     {
-        return(getfetch(0, $id, @elems));
+        return $this->_getfetch(0, $id, $elems);
     }
 
     /**
@@ -669,7 +669,7 @@ class NoidDo
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
         }
-        if (! Noid::hold($noid, $contact, $on_off, @ids)) {
+        if (! Noid::hold($noid, $contact, $on_off, $ids)) {
             fwrite($stderr, Noid::errmsg($noid));
             $this->usage(1, 1, 'hold');
             Noid::dbclose($noid);
@@ -902,7 +902,7 @@ class NoidDo
             print PHP_EOL . PHP_EOL;
             return 1;
         }
-        # If we get here, @blurbs names one story.
+        # If we get here, $blurbs names one story.
         $blurb = array_shift($blurbs);
 
         # Big if-elseif clause to switch on requested topic.
