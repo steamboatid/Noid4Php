@@ -137,7 +137,7 @@ class Noid
      *
      * @var array
      */
-    protected $valid_hows = array(
+    protected $_valid_hows = array(
         'new', 'replace', 'set',
         'append', 'prepend', 'add', 'insert',
         'delete', 'purge', 'mint', 'peppermint',
@@ -297,7 +297,7 @@ class Noid
      * @param string $id
      * @param string $elem
      * @param string $value
-     * @return array
+     * @return array|null
      */
      public function bind($noid, $contact, $validate, $how, $id, $elem, $value)
      {
@@ -336,11 +336,12 @@ class Noid
         $oid = $id;
         $oelem = $elem;
         $hold = 0;
-        if ($id =~ /^:/) {
-            $id !~ m|^:idmap/(.+)| and
-                $this->addmsg($noid, sprintf('error: %s: id cannot begin with ":" unless of the form ":idmap/Idpattern".', $oid)),
+        if (substr($id, 0, 1) === ':') {
+            if (!preg_match('|^:idmap/(.+)|', $id, $matches)) {
+                $this->addmsg($noid, sprintf('error: %s: id cannot begin with ":" unless of the form ":idmap/Idpattern".', $oid));
                 return(undef);
-            ($id, $elem) = ("$R/idmap/$oelem", $1);
+            }
+            ($id, $elem) = ("$R/idmap/$oelem", $matches[1]);
             $$noid{"$R/longterm"} and
                 $hold = 1;
         }
@@ -357,7 +358,7 @@ class Noid
             or
                 $this->logmsg($noid, sprintf('warning: %s: binding an unissued identifier that has no hold placed on it.', $oid));
         }
-        if (grep(/^$how$/, @valid_hows) != 1) {
+        if (!in_array($how, $this->_valid_hows)) {
             $this->addmsg($noid, sprintf('error: bind how?  What does %s mean?', $how));
             return(undef);
         }
@@ -391,14 +392,14 @@ class Noid
 
         dblock();
         if (! defined($$noid{"$id\t$elem"})) {      # currently unbound
-            grep(/^$how$/, qw( replace append prepend delete )) == 1 and
+            if (in_array($how, array('replace', 'append', 'prepend', 'delete'))) and
                 $this->addmsg($noid, sprintf('error: for "bind %s", "%s %s" must already be bound.', $how, $oid, $oelem)),
                 dbunlock(),
                 return(undef);
             $$noid{"$id\t$elem"} = '';  # can concatenate with impunity
         }
         else {                      # currently bound
-            grep(/^$how$/, qw( new mint peppermint )) == 1 and
+            if (in_array($how, array('new', 'mint', 'peppermint'))) and
                 $this->addmsg($noid, sprintf('error: for "bind %s", "%s %s" cannot already be bound.', $how, $oid, $oelem)),
                 dbunlock(),
                 return(undef);
@@ -514,8 +515,8 @@ class Noid
         $value = 0;
         $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         $status == 0 and
-            $skip = ($key =~ m|^$first$R/|),
-            $done = ($key !~ m|^$first|),
+            $skip = preg_match("|^$first$R/|", $key),
+            $done = !preg_match("|^$first|", $key),
         1 or
             $done = 1
         ;
@@ -523,18 +524,19 @@ class Noid
             ! $skip and $verbose and
                 # if $verbose (ie, fetch), include label and
                 # remember to strip "Id\t" from front of $key
-                push(@retvals, ($key =~ /^[^\t]*\t(.*)/ ? $1 : $key)
+                $key = preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key;
+                push(@retvals, $key
                     . ': ' . sprintf('clearing %d bytes', strlen($value))),
                 delete($$noid{$key});
             $status = $cursor->c_get($key, $value, DB_NEXT);
-            $status != 0 || $key !~ /^$first/ and
+            $status != 0 || !preg_match("/^$first/", $key) and
                 $done = 1   # no more elements under id
             or
-                $skip = ($key =~ m|^$first$R/|)
+                $skip = preg_match("|^$first$R/|", $key)
             ;
         }
         undef($cursor);
-        return($verbose ? @retvals : ());
+        return $verbose ? $retvals : array();
     }
 
     /**
@@ -589,7 +591,7 @@ class Noid
 
         # Type check various parameters.
         #
-        ! defined($contact) || $contact !~ /\S/ and
+        ! defined($contact) || trim($contact) == '' and
             $this->addmsg($noid, sprintf('error: contact (%s) must be non-empty.', $contact),
             return(undef);
 
@@ -604,13 +606,13 @@ class Noid
         ! defined($subnaa) and $subnaa = '';
 
         $term === 'long' &&
-            ($naan !~ /\S/ || $naa !~ /\S/ || $subnaa !~ /\S/) and
+            (!strlen(trim($naan)) || !strlen(trim($naa)) || !strlen(trim($subnaa))) and
                 $this->addmsg($noid, sprintf('error: longterm identifiers require an NAA Number, NAA, and SubNAA.')),
                 return(undef);
         # xxx should be able to check naa and naan live against registry
         # yyy code should invite to apply for NAAN by email to ark@cdlib.org
         # yyy ARK only? why not DOI/handle?
-        $term === 'long' && ($naan !~ /\d\d\d\d\d/) and
+        $term === 'long' && !preg_match('/\d\d\d\d\d/', $naan) and
             $this->addmsg($noid, sprintf('error: term of "long" requires a 5-digit NAAN (00000 if none), and non-empty string values for NAA and SubNAA.')),
             return(undef);
 
@@ -644,7 +646,7 @@ class Noid
         $$noid{"$R/prefix"} = $prefix;
         $$noid{"$R/mask"} = $mask;
         $$noid{"$R/firstpart"} = ($naan ? $naan . '/' : '') . $prefix;
-        $$noid{"$R/addcheckchar"} = ($mask =~ /k$/);    # boolean answer
+        $$noid{"$R/addcheckchar"} = (boolean) preg_match('/k$/', $mask);    # boolean answer
 
         $$noid{"$R/generator_type"} = $gen_type;
         $$noid{"$R/genonly"} = $genonly;
@@ -703,19 +705,19 @@ class Noid
         #     arbitrary, so (GRANITE) was chosen since it's easy to remember
         #
         # $pre and $msk are in service of the letter "A" below.
-        (my $pre = $prefix) =~ s/[a-z]/e/ig;
-        (my $msk = $mask) =~ s/k/e/g;
-        $msk =~ s/^ze/zeeee/;       # initial 'e' can become many later on
+        $pre = preg_replace('/[a-z]/i', 'e', $prefix);
+        $msk = preg_replace('/k/', 'e', $mask);
+        $msk = preg_replace('/^ze/', 'zeeee', $msk);       # initial 'e' can become many later on
 
         $properties = ($naan !== '' && $naan !== '00000' ? 'G' : '-')
             . ($gen_type === 'random' ? 'R' : '-')
             # yyy substr is supposed to cut off first char
-            . ($genonly && ($pre . substr($msk, 1)) !~ /eee/ ? 'A' : '-')
+            . ($genonly && !preg_match('/eee/', $pre . substr($msk, 1)) ? 'A' : '-')
             . ($term === 'long' ? 'N' : '-')
-            . ($genonly && $prefix !~ /-/ ? 'I' : '-')
+            . ($genonly && !preg_match('/-/', $prefix) ? 'I' : '-')
             . ($$noid{"$R/addcheckchar"} ? 'T' : '-')
             # yyy "E" mask test anticipates future extensions to alphabets
-            . ($genonly && ($prefix =~ /[aeiouy]/i || $mask =~ /[^rszdek]/)
+            . ($genonly && (preg_match('/[aeiouy]/i', $prefix) || preg_match('/[^rszdek]/', $mask))
                 ? '-' : 'E')        # Elided vowels or not
         ;
         $$noid{"$R/properties"} = $properties;
@@ -746,9 +748,9 @@ class Noid
         #   }
 
         $cwd = $dbdir;   # by default, assuming $dbdir is absolute path
-        if ($dbdir !~ m|^/|) {
-            $cwd = $ENV{"PWD"} . "/$dbdir";
-            }
+        if (substr($dbdir, 0, 1) !== '/') {
+            $cwd = getcwd() . '/' . $dbdir;
+        }
 
         # Adjust some empty values for short-term display purposes.
         #
@@ -860,13 +862,13 @@ NAAN:      $naan
             $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $!));
             return 0;
         }
-        if ($key =~ m|^$R/$R/|) {
+        if (strpos($key, "$R/$R") === 0) {
             print 'User Assigned Values' . PHP_EOL;
             print "  $key: $value" . PHP_EOL;
             while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
                 last
-                    if ($key !~ m|^$R/$R/|);
-                print "  $key: $value\n";
+                    if (strpos($key, "$R/$R") !== 0);
+                print "  $key: $value" . PHP_EOL;
             }
             print PHP_EOL;
         }
@@ -874,12 +876,12 @@ NAAN:      $naan
         print "  $key: $value" . PHP_EOL;
         while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
             last
-                if ($key !~ m|^$R/|);
-            print "  $key: $value\n"
-                if ($level === 'full' or
-                    $key !~ m|^$R/c\d| &&
-                    $key !~ m|^$R/saclist| &&
-                    $key !~ m|^$R/recycle/|);
+                if (strpos($key, "$R/") !== 0);
+            print "  $key: $value" . PHP_EOL
+                if ($level === 'full'
+                    or !preg_match("|^$R/c\d|", $key)
+                    && strpos($key, "$R/saclist") !== 0
+                    && strpos($key, "$R/recycle/") !== 0;
         }
         print PHP_EOL;
         undef $cursor;
@@ -924,7 +926,7 @@ NAAN:      $naan
 
         $env = null;
         $envhome = null;
-        ($envhome = $dbname) =~ s|[^/]+$||; # path ending in "NOID/"
+        $envhome = preg_replace('|[^/]+$|', '', $dbname); # path ending in "NOID/"
         ! -d $envhome and
             $this->addmsg(undef, sprintf('%s not a directory', $envhome)),
             return undef;
@@ -1145,8 +1147,8 @@ NAAN:      $naan
             $value = 0;
             $status = $cursor->c_get($key, $value, DB_SET_RANGE);
             $status == 0 and
-                $skip = ($key =~ m|^$first$R/|),
-                $done = ($key !~ m|^$first|),
+                $skip = strpos($key, "$first$R/") === 0,
+                $done = strpos($key, $first) !== 0,
             1 or
                 $done = 1
             ;
@@ -1154,14 +1156,15 @@ NAAN:      $naan
                 ! $skip and
                     # if $verbose (ie, fetch), include label and
                     # remember to strip "Id\t" from front of $key
-                    $retval .= ($verbose ?
-                        ($key =~ /^[^\t]*\t(.*)/ ? $1 : $key)
-                            . ": " : '') . "$value\n";
+                    $retval .= ($verbose
+                            ? (preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key) . ': '
+                            : '')
+                        . $value . PHP_EOL;
                 $status = $cursor->c_get($key, $value, DB_NEXT);
-                $status != 0 || $key !~ /^$first/ and
+                $status != 0 || strpos($key, $first) !== 0 and
                     $done = 1   # no more elements under id
                 or
-                    $skip = ($key =~ m|^$first$R/|)
+                    $skip = strpos($key, "$first$R/") === 0,
                 ;
             }
             undef($cursor);
@@ -1336,7 +1339,7 @@ NAAN:      $naan
         ! defined($circ_svec) || $circ_svec === '' and
             $this->logmsg($noid, sprintf('error: id %s has no circ status vector -- circ record is %s', $id, $circ_rec)),
             return '';
-        $circ_svec !~ /^([iqu])[iqu]*$/ and
+        !preg_match('/^([iqu])[iqu]*$/', $circ_svec) and
             $this->logmsg($noid, sprintf('error: id %s has a circ status vector containing letters other than "i", "q", or "u" -- circ record is %s', $id, $circ_rec)),
             return '';
         return $1;
@@ -1378,7 +1381,7 @@ NAAN:      $naan
         #       yyy pepper not implemented yet
         # If issuing a longterm id, we automatically place a hold on it.
         #
-        $circ_svec =~ /^i/ and
+        substr($circ_svec, 0, 1) == 'i' and
             clear_bindings($noid, $id, 0),
             delete($$noid{"$id\t$R/p"}),
             ($$noid{"$R/longterm"} and
@@ -1479,8 +1482,10 @@ NAAN:      $naan
         # yyy what is sensible thing to do if no ids are present?
         $iderror = '';
         $$noid{"$R/genonly"} and
-            ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
+            $iderror = validate($noid, '-', $ids) and
+            if (substr($iderror, 0, 6) != 'error:') {
                 $iderror = '';
+            }
         $iderror and
             $this->addmsg($noid, sprintf('error: hold operation not started -- one or more ids did not validate: %s', PHP_EOL . $iderror),
             return 0;
@@ -1598,24 +1603,26 @@ NAAN:      $naan
         $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         $status and
             return sprintf('error: id2elemval: c_get status/errno (%s/%s)', $status, $!);
-        $key !~ /^$first/ and
+        strpos($key, $first) !== 0 and
             return '';
         $pattern = null;
         $newval = null;
         while (1) { # exhaustively visit all patterns for this element
-            ($pattern) = ($key =~ m|$first(.+)|);
+            $pattern = preg_match("|$first(.+)|", $key) ? $key : null;
             $newval = $id;
-            defined($pattern) and
-                # yyy kludgy use of unlikely delimiters (ascii 05: Enquiry)
-                (eval $newval . '  =~ ' . "s$pattern$value" and
-                    # replaced, so return
-                    return ($verbose ? $elem . ': ' : '') . $newval),
-                ($@ and
-                    return sprintf('error: id2elemval eval: %s'; $@))
-                ;
+            if (!is_null($pattern)) {
+                try {
+                    # yyy kludgy use of unlikely delimiters (ascii 05: Enquiry)
+                    $newval = preg_replace(chr(5) . $pattern . chr(5), $value, $newval);
+                } catch (Exception $e) {
+                    return sprintf('error: id2elemval eval: %s', $e->getMessage());
+                }
+                # replaced, so return
+                return ($verbose ? $elem . ': ' : '') . $newval;
+            }
             $cursor->c_get($key, $value, DB_NEXT) != 0 and
                 return '';
-            $key !~ /^$first/ and       # no match and ran out of rules
+            strpos($key, $first) !== 0 and       # no match and ran out of rules
                 return '';
         }
     }
@@ -1737,7 +1744,7 @@ NAAN:      $naan
             # whose key is greater than or equal to $first.  If the
             # queue was empty, there should be no items under "$R/q/".
             #
-            ($qdate) = ($key =~ m|$R/q/(\d{14})|);
+            $qdate = preg_match("|$R/q/(\d{14})|", $key) ? $key : null;
             ! defined($qdate) and           # nothing in queue
                 # this is our chance -- see queue() comments for why
                 ($$noid{"$R/fseqnum"} > self::SEQNUM_MIN and
@@ -1771,18 +1778,18 @@ NAAN:      $naan
 
             $circ_svec = get_circ_svec($noid, $id);
 
-            $circ_svec =~ /^i/ and
+            substr($circ_svec, 0, 1) === 'i' and
                 $this->logmsg($noid,
                     sprintf('error: id %s appears to have been issued while still in the queue -- circ record is %s',
                         $id, $$noid{"$id\t$R/c"})),
                 next
             ;
-            $circ_svec =~ /^u/ and
+            substr($circ_svec, 0, 1) === 'u' and
                 $this->logmsg($noid, sprintf('note: id %s, marked as unqueued, is now being removed/skipped in the queue -- circ record is %s',
                     $id, $$noid{"$id\t$R/c"})),
                 next
             ;
-            $circ_svec =~ /^([^q])/ and
+            preg_match('/^([^q])/', $circ_svec) and
                 $this->logmsg($noid, sprintf('error: id %s found in queue has an unknown circ status ($1) -- circ record is %s',
                     $id, $$noid{"$id\t$R/c"})),
                 next
@@ -1865,7 +1872,7 @@ NAAN:      $naan
             # previous while loop), we go to generate another id.  If
             # term is "long", log that we skipped this one.
             #
-            $circ_svec =~ /^q/ and
+            substr($circ_svec, 0, 1) === 'q' and
                 ($$noid{"$R/longterm"} && $this->logmsg($noid,
                     sprintf("note: will not issue genid()'d %s as its status is 'q', circ_rec is %s",
                         $id, $$noid{"$id\t$R/c"}))),
@@ -1878,18 +1885,18 @@ NAAN:      $naan
             # an id can be re-issued only if (a) its hold was released
             # and (b) it was placed in the queue (thus marked with 'q').
             #
-            $circ_svec =~ /^i/ && ($$noid{"$R/longterm"}
+            substr($circ_svec, 0, 1) === 'i' && ($$noid{"$R/longterm"}
                         || ! $$noid{"$R/wrap"}) and
                 $this->logmsg($noid, sprintf('error: id %s cannot be re-issued except by going through the queue, circ_rec %s',
                     $id, $$noid{"$id\t$R/c"})),
                 next
             ;
-            $circ_svec =~ /^u/ and
+            substr($circ_svec, 0, 1) === 'u' and
                 $this->logmsg($noid, sprintf('note: generating id %s, currently marked as unqueued, circ record is %s',
                     $id, $$noid{"$id\t$R/c"})),
                 next
             ;
-            $circ_svec =~ /^([^iqu])/ and
+            preg_match('/^([^iqu])/', $circ_svec) and
                 $this->logmsg($noid, sprintf('error: id %s has unknown circulation status (%s), circ_rec %s';
                     $id, $1, $$noid{"$id\t$R/c"})),
                 next
@@ -1960,8 +1967,8 @@ NAAN:      $naan
 
         # Confirm well-formedness of $mask before proceeding.
         #
-        $mask !~ /^[rsz][de]+k?$/
-            and return undef;
+        !preg_match('/^[rsz][de]+k?$/', $mask) and
+            return undef;
 
         $varwidth = 0;   # we start in fixed width part of the mask
         $rmask = array_reverse(str_split($mask));  # process each char in reverse
@@ -1969,47 +1976,28 @@ NAAN:      $naan
             if (! $varwidth) {
                 $c = shift @rmask;  # check next mask character,
                 ! defined($c)
-                    || $c =~ /[rs]/ # terminate on r or s even if
+                    || $c === 'r' || $c === 's' # terminate on r or s even if
                     and last;   # $num is not all used up yet
-                $c =~ /e/ and
+                $c === 'e' and
                     $div = $this->alphacount
                 or
-                $c =~ /d/ and
+                $c === 'd' and
                     $div = $this->digitcount
                 or
-                $c =~ /z/ and
+                $c === 'z' and
                     $varwidth = 1   # re-uses last $div value
                     and next
                 or
-                $c =~ /k/ and
+                $c === 'k' and
                     next
                 ;
-                #=for later
-                ## why is this slower?  should be faster since it does NOT use regexprs
-                # ! defined($c) ||    # terminate on r or s even if
-                #     $c === 'r' || $c === 's'
-                #     and last;   # $num is not all used up yet
-                # $c === 'e' and
-                #     $div = $this->alphacount
-                # or
-                # $c === 'd' and
-                #     $div = $this->digitcount
-                # or
-                # $c === 'z' and
-                #     $varwidth = 1   # re-uses last $div value
-                #     and next
-                # or
-                # $c === 'k' and
-                #     next
-                # ;
-                #=cut
             }
             $remainder = $num % $div;
             $num = intval($num / $div);
             $s = $this->_xdig[$remainder] . $s;
         }
-        $mask =~ /k$/ and       # if it ends in a check character
-            $s .= "+";      # represent it with plus in new id
+        substr($mask, -1) === 'k' and       # if it ends in a check character
+            $s .= '+';      # represent it with plus in new id
         return $s;
     }
 
@@ -2041,35 +2029,37 @@ NAAN:      $naan
         # save directory and final component separately.
         #
         $template = $template ?: '';
-        $template =~ s|[/\s]+$||;       # strip final spaces or slashes
-        ($dirname, $template) = $template =~ m|^(.*/)?([^/]+)$|;
-        $dirname = $dirname ?: '';            # make sure $dirname is defined
+        $template = preg_replace('|[/\s]+$|', '', $template);       # strip final spaces or slashes
+        preg_match('|^(.*/)?([^/]+)$|', $template, $matches);
+        $dirname = isset($matches[1]) ? $matches[1] : '';            # make sure $dirname is defined
+        $template = isset($matches[2]) ? $matches[2] : '';
 
         ! $template || $template === '-' and
             $$msg = 'parse_template: no minting possible.',
             $_[1] = $_[2] = $_[3] = '',
             return self::NOLIMIT;
-        $template !~ /^([^\.]*)\.(\w+)/ and
+        !preg_match('/^([^\.]*)\.(\w+)/', $template, $matches) and
             $$msg = "parse_template: no template mask - can't generate identifiers.",
             return 0;
-        ($prefix, $mask) = ($1 || '', $2);
+        $prefix = isset($matches[1]) ? $matches[1] : '';
+        $mask = isset($matches[2]) ? $matches[2] : '';
 
-        $mask !~ /^[rsz]/ and
+        !preg_match('/^[rsz]/', $mask) and
             $$msg = 'parse_template: mask must begin with one of the letters' . PHP_EOL
                 . '"r" (random), "s" (sequential), or "z" (sequential unlimited).',
             return 0;
 
-        $mask !~ /^.[^k]+k?$/ and
+        !preg_match('/^.[^k]+k?$/', $mask) and
             $$msg = 'parse_template: exactly one check character (k) is allowed, and it may only appear at the end of a string of one or more mask characters.',
             return 0;
 
-        $mask !~ /^.[de]+k?$/ and
+        !preg_match('/^.[de]+k?$/', $mask) and
             $$msg = 'parse_template: a mask may contain only the letters "d" or "e".',
             return 0;
 
         # Check prefix for errors.
         #
-        $has_cc = ($mask =~ /k$/);
+        $has_cc = substr($mask, -1) === 'k';
         foreach (str_split($prefix) as $c) {
             if ($has_cc && $c !== '/' && ! exists($this->_ordxdig{$c})) {
                 $$msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
@@ -2086,7 +2076,7 @@ NAAN:      $naan
         #
         $masklen = strlen($mask) - 1;    # subtract one for [rsz]
         $$msg = $prefix . $masklen;
-        $mask =~ /^z/ and           # "+" indicates length can grow
+        substr($mask, 0, 1) === 'z' and           # "+" indicates length can grow
             $$msg .= '+';
 
         # r means random;
@@ -2097,22 +2087,22 @@ NAAN:      $naan
         $total = 1;
         foreach (str_split($mask) as $c) {
             # Mask chars it could be are: d e k
-            $c =~ /e/ and
+            $c === 'e' and
                 $total *= $this->alphacount
             or
-            $c =~ /d/ and
+            $c === 'd' and
                 $total *= $this->digitcount
             or
-            $c =~ /[krsz]/ and
+            preg_match('/[krsz]/', $c) and
                 next
             ;
         }
 
         $_[1] = $prefix;
         $_[2] = $mask;
-        $_[3] = $gen_type = ($mask =~ /^r/ ? 'random' : 'sequential');
+        $_[3] = $gen_type = (substr($mask, 0, 1) === 'r' ? 'random' : 'sequential');
         # $_[4] was set to the synonym already
-        return ($mask =~ /^z/ ? self::NOLIMIT : $total);
+        return substr($mask, 0, 1) === 'z' ? self::NOLIMIT : $total;
     }
 
     /**
@@ -2180,7 +2170,7 @@ NAAN:      $naan
         ! defined($contact) and
             $this->addmsg($noid, 'error: contact undefined'),
             return array();
-        ! defined($when) || $when !~ /\S/ and
+        ! defined($when) || trim($when) === '' and
             $this->addmsg($noid, 'error: queue when? (eg, first, lvf, 30d, now)'),
             return array();
         # yyy what is sensible thing to do if no ids are present?
@@ -2195,10 +2185,10 @@ NAAN:      $naan
 
         # You can express a delay in days (d) or seconds (s, default).
         #
-        if ($when =~ /^(\d+)([ds]?)$/) {    # current time plus a delay
+        if (preg_match('/^(\d+)([ds]?)$/', $when, $matches) {    # current time plus a delay
             # The number of seconds in one day is 86400.
-            $multiplier = (defined($2) && $2 === 'd' ? 86400 : 1);
-            $qdate = temper(time() + $1 * $multiplier);
+            $multiplier = isset($matches[2]) && $matches[2] === 'd' ? 86400 : 1;
+            $qdate = temper(time() + $matches[1]) * $multiplier);
         }
         elseif ($when === 'now') {    # a synonym for current time
             $qdate = temper(time());
@@ -2238,8 +2228,10 @@ NAAN:      $naan
 
         $iderror = '';
         $$noid{"$R/genonly"} and
-            ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
+            $iderror = validate($noid, '-', $ids) and
+            if (substr($iderror, 0, 6) != 'error:') {
                 $iderror = '';
+            }
         $iderror and
             $this->addmsg($noid, sprintf('error: queue operation not started -- one or more ids did not validate: %s', PHP_EOL . $iderror)),
             return array();
@@ -2265,21 +2257,21 @@ NAAN:      $naan
             #
             $circ_svec = get_circ_svec($noid, $id);
 
-            $circ_svec =~ /^q/ && ! $delete and
+            substr($circ_svec, 0, 1) === 'q' && ! $delete and
                 $m = sprintf('error: id %s cannot be queued since it appears to be in the queue already -- circ record is %s',
                     $id, $$noid{"$id\t$R/c"}),
                 $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
-            $circ_svec =~ /^u/ && $delete and
+            substr($circ_svec, 0, 1) === 'u' && $delete and
                 $m = sprintf('error: id %s has been unqueued already -- circ record is %s',
                     $id, $$noid{"$id\t$R/c"}),
                 $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
-            $circ_svec !~ /^q/ && $delete and
+            substr($circ_svec, 0, 1) !== 'q' && $delete and
                 $m = sprintf('error: id %s cannot be unqueued since its circ record does not indicate its being queued, circ record is %s',
                     $id, $$noid{"$id\t$R/c"}),
                 $this->logmsg($noid, $m),
@@ -2292,7 +2284,7 @@ NAAN:      $naan
                 ($$noid{"$R/longterm"} && $this->logmsg($noid,
                     sprintf('note: id %s being queued before first minting (to be pre-cycled)', $id))),
             1 or
-            $circ_svec =~ /^i/ and
+            substr($circ_svec, 0, 1) === 'i' and
                 ($$noid{"$R/longterm"} && $this->logmsg($noid, sprintf('note: longterm id %s being queued for re-issue', $id)))
             ;
 
@@ -2301,7 +2293,7 @@ NAAN:      $naan
                     ($delete ? 'u' : 'q') . $circ_svec,
                     $currdate, $contact);
 
-            ($idval = $id) =~ s/^$firstpart//;
+            $idval = preg_replace("/^$firstpart/", '', $id);
             $paddedid = sprintf("%0$padwidth" . "s", $idval);
             $fixsqn = sprintf("%06d", $seqnum % self::SEQNUM_MAX);
 
@@ -2401,7 +2393,7 @@ NAAN:      $naan
             . &$func($naan . &n2xdig($tminus1, $mask))
             . ($total < 0 ? ' and beyond.' : '')
             . PHP_EOL;
-        $mask !~ /^r/ and
+        substr($mask, 0, 1) !== 'r' and
             return 1;
         print 'A sampling of random values (may already be in use): ';
         for ($i = 0; $i < 5; $i++) {
@@ -2462,9 +2454,10 @@ NAAN:      $naan
             $mask = $$noid{"$R/mask"};
             # push(@retvals, "template: " . $$noid{"$R/template"});
             if (! $$noid{"$R/template"}) {  # do blanket validation
-                $nonulls = grep(s/^(.)/id: $1/, @ids);
-                ! $nonulls and
+                $nonulls = array_filter(preg_replace('/^(.)/', 'id: $1', $ids));
+                if (empty($nonulls) {
                     return array();
+                }
                 push($retvals, @nonulls);
                 return $retvals;
             }
@@ -2479,10 +2472,11 @@ NAAN:      $naan
         $c = null;
         $m = null;
         $varpart = null;
-        $should_have_checkchar = (($m = $mask) =~ s/k$//);
+        $m = substr($mask, -1) === 'k' ? substr($mask, -1) : $mask;
+        $should_have_checkchar = $m !== $mask;
         $naan = $$noid{"$R/naan"};
         foreach ($ids as $id) {
-            ! defined($id) || $id =~ /^\s*$/ and
+            ! defined($id) || trim($id) == '' and
                 push(@retvals,
                     "iderr: can't validate an empty identifier"),
                 continue;
@@ -2492,8 +2486,8 @@ NAAN:      $naan
             # the $id should be of the form $R/idmap/ElementName, with
             # element, Idpattern, and value, ReplacementPattern.
             #
-            $id =~ m|^$R/| and
-                push(@retvals, ($id =~ m|^$R/idmap/.+|
+            strpos("$R/", $id) === 0 and
+                push(@retvals, preg_match("|^$R/idmap/.+|", $id)
                     ? sprintf('id: %s', $id)
                     : sprintf('iderr: identifiers must not start with "%s".', "$R/")),
                 continue;
@@ -2502,7 +2496,8 @@ NAAN:      $naan
             $first and
                 $first .= '/';
             $first .= $prefix;          # ... if any
-            ($varpart = $id) !~ s/^$first// and
+            $varpart = preg_replace('/^$first/', '', $id);
+            strpos($id, $first) !== 0 and
             # yyy            ($varpart = $id) !~ s/^$prefix// and
                 push(@retvals, sprintf('iderr: %s should begin with %s.', $id, $first)),
                 continue;
@@ -2529,16 +2524,16 @@ NAAN:      $naan
                 ! defined($m = shift @maskchars) and
                     push(@retvals, sprintf('iderr: %s longer than specified template (%s)', $id, $template)),
                     continue 2;
-                $m =~ /e/ && $this->legalstring !~ /$c/ and
+                $m === 'e' && !preg_match("/$c/", $this->legalstring) and
                     push(@retvals, sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (extended digit)',
                         $id, $c, $template, $m)),
                     continue 2
                 or
-                $m =~ /d/ && '0123456789' !~ /$c/ and
+                $m === 'e' && !preg_match("/$c/", '0123456789') and
                     push(@retvals, sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (digit)',
                          $id, $c, $template, $m)),
                     continue 2
-                ;       # or $m =~ /k/, in which case skip
+                ;       # or $m === 'k', in which case skip
             }
             defined($m = shift @maskchars) and
                 push(@retvals, sprintf('iderr: %s shorter than specified template (%s)'; $id, $template)),
