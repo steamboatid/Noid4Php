@@ -387,15 +387,15 @@ class NoidDo
             }
 
             # To slurp paragraph, apparently safest to use local $/, which
-            local $/;            # disappears when scope exits.
-            $/ = PHP_EOL . PHP_EOL;            # Means paragraph mode.
-            my $para = <STDIN> || '';
-            $para = trim($para);    # yyy needed?
+            # disappears when scope exits.
+            $slurp = PHP_EOL . PHP_EOL; # Means paragraph mode.
+            $para = trim(fgets(STDIN)); // reads one line from STDIN
             $para = preg_replace('/^#.*\n/g', '', $para); # remove comment lines
             $para = preg_replace('/\n\s+/g', ' ', $para); # merge continuation lines
             $elemvals = preg_split('/^([^:]+)\s*:\s*/m', $para);
-            array_shift($elemvals);        # throw away first null
-            my ($bound, $total) = (0, 0);
+            array_shift($elemvals); # throw away first null
+            $bound = 0;
+            $total = 0;
             while (1) {
                 ($elem, $value) = (shift @elemvals, shift @elemvals);
                 if (! defined($elem) && ! defined($value)) {
@@ -415,7 +415,7 @@ class NoidDo
                 }
                 $report = Noid::bind($noid, $contact, $validate,
                     $how, $id, $elem, $value);
-                if (! defined($report)) {
+                if (is_null($report)) {
                     fwrite($stderr, $report . PHP_EOL);
                     $this->usage(1, 1, 'bind');
                     # yyy how/who should log failures in "hard" case
@@ -427,7 +427,7 @@ class NoidDo
             }
             # yyy summarize for log $total and $bound
             Noid::dbclose($noid);
-            return(defined($report) ? 1 : 0);
+            return is_null($report) ? 1 : 0;
         }
         elseif ($elem == ':-') {        # expect name/value to be rest of file
             if (defined($value)) {
@@ -455,12 +455,8 @@ class NoidDo
     #        $value .= <STDIN>;        # $/==undef means file mode.
 
             # Read all of STDIN into array "@input_lines".
-            my @input_lines = <STDIN>;
-
-            # Remove all newlines.
-            foreach (@input_lines) {
-                chomp;
-                }
+            # And remove all newlines.
+            $input_lines = file(STDIN, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
             # Ignore any leading lines that start with a pound sign
             # or contain nothing but white space.
@@ -540,9 +536,9 @@ class NoidDo
      */
     public function dbcreate($template, $policy, $naan, $naa, $subnaa)
     {
-        my $dbreport = Noid::dbcreate($dbdir, $contact, $template, $policy,
-                $naan, $naa, $subnaa);
-        if (! $dbreport) {
+        $dbreport = Noid::dbcreate($dbdir, $contact, $template, $policy,
+            $naan, $naa, $subnaa);
+        if (!$dbreport) {
             print Noid::errmsg() . PHP_EOL;
             return 0;
         }
@@ -556,12 +552,13 @@ class NoidDo
      * @param string $level
      * @return integer 0 (error) or 1 (success)
      */
-    public function dbinfo($level)
+    public function dbinfo($level = 'brief')
     {
-        $level = 'brief'
-            if (! defined($level));
-        my $noid = Noid::dbopen($dbname, DB_RDONLY);
-        if (! $noid) {
+        if (empty($level)) {
+            $level = 'brief';
+        }
+        $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
         }
@@ -579,7 +576,7 @@ class NoidDo
      */
     public function fetch($id, $elems)
     {
-        return(getfetch(1, $id, @elems));
+        return getfetch(1, $id, $elems);
     }
 
     /**
@@ -606,19 +603,19 @@ class NoidDo
     {
         global $stderr;
 
-        my $noid = Noid::dbopen($dbname, DB_RDONLY);
+        $noid = Noid::dbopen($dbname, DB_RDONLY);
         if (! $noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
         }
-        my $fetched = Noid::fetch($noid, $verbose, $id, $elems);
-        if (! defined($fetched)) {
+        $fetched = Noid::fetch($noid, $verbose, $id, $elems);
+        if (is_null($fetched)) {
             fwrite($stderr, Noid::errmsg($noid));
         }
         else {
             print($fetched);
             if ($verbose) {
-                print(PHP_EOL);
+                print PHP_EOL;
             }
         }
         Noid::dbclose($noid);
@@ -665,8 +662,8 @@ class NoidDo
     {
         global $stderr;
 
-        my $noid = Noid::dbopen($dbname, 0);
-        if (! $noid) {
+        $noid = Noid::dbopen($dbname, 0);
+        if (!$noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
         }
@@ -718,14 +715,14 @@ class NoidDo
             $this->usage(1, 1, 'mint');
             return 0;
         }
-        my $noid = Noid::dbopen($dbname, 0);
-        if (! $noid) {
+        $noid = Noid::dbopen($dbname, 0);
+        if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
         }
-        my $id;
         while ($n--) {
-            if (! defined($id = Noid::mint($noid, $contact, $pepper))) {
+            $id = Noid::mint($noid, $contact, $pepper);
+            if (is_null($id)) {
                 fwrite($stderr, Noid::errmsg($noid));
                 Noid::dbclose($noid);
                 return 0;
@@ -754,8 +751,8 @@ class NoidDo
             $this->usage(1, 1, 'note');
             return 0;
         }
-        my $noid = Noid::dbopen($dbname, 0);
-        if (! Noid::note($noid, $contact, $key, $value)) {
+        $noid = Noid::dbopen($dbname, 0);
+        if (!Noid::note($noid, $contact, $key, $value)) {
             print Noid::errmsg($noid);
         }
         Noid::dbclose($noid);
@@ -773,13 +770,12 @@ class NoidDo
     {
         global $stderr;
 
-        my $noid = Noid::dbopen($dbname, 0);
-        if (! $noid) {
+        $noid = Noid::dbopen($dbname, 0);
+        if (!$noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
         }
-        my @queued = Noid::queue($noid, $contact, $when, @ids);
-        my $retval;
+        $queued = Noid::queue($noid, $contact, $when, $ids);
         if (empty($queued)) {
             $retval = 0;
             fwrite($stderr, Noid::errmsg($noid . PHP_EOL));
@@ -788,10 +784,11 @@ class NoidDo
             $retval = 1;
             print(join(PHP_EOL, $queued) . PHP_EOL);
         }
-        my $n = scalar(grep(! /^error:/, @queued));
+        $n = array_filter($queued, function ($v) { return strpos($v, 'error:') !== 0; });
+        $n = count($n);
         printf('note: %d %s queued' . PHP_EOL, $n, $n == 1 ? 'identifier' : 'identifiers');
         Noid::dbclose($noid);
-        return($retval);
+        return $retval;
     }
 
     /**
@@ -805,12 +802,12 @@ class NoidDo
     {
         global $stderr;
 
-        my $noid = Noid::dbopen($dbname, DB_RDONLY);
-        if (! $noid) {
+        $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
         }
-        my @valids = Noid::validate($noid, $template, @ids);
+        $valids = Noid::validate($noid, $template, $ids);
         if (empty($valids)) {
             fwrite($stderr, Noid::errmsg($noid));
             Noid::dbclose($noid);
@@ -818,11 +815,12 @@ class NoidDo
             return 0;
         }
 
-        my @iderrs = grep(/^error:/, @valids);
-        print($_ . PHP_EOL)
-            for (@valids);
+        $iderrs = array_filter($valids, function ($v) { return strpos($v, 'error:') === 0; });
+        foreach ($valids as $valid) {
+            print($valid . PHP_EOL);
+        }
         Noid::dbclose($noid);
-        return(scalar(@ids) - scalar(@iderrs));
+        return count($ids) - count($iderrs);
     }
 
     /**
