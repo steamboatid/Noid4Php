@@ -10,24 +10,15 @@
  * @link http://search.cpan.org/~jak/Noid/
  * @link https://github.com/Daniel-KM/Noid4Php
  * @package Noid
+ * @version 1.0.0-0.424-php
  */
 
 /*
-use 5.000000;
-use strict;
-use warnings;
-
 require Exporter;
 our @ISA = qw(Exporter);
 
-our $VERSION;
-$VERSION = sprintf "%d.%02d", q$Name: Release-0-424 $ =~ /Release-(\d+)-(\d+)/;
-our @EXPORT_OK = qw(
-    addmsg bind checkchar dbopen dbclose dbcreate dbinfo
-    errmsg fetch getnoid hold hold_release hold_set
-    locktest logmsg mint n2xdig note parse_template queue
-    sample scope validate VERSION xdig
-);
+use Fcntl qw(:DEFAULT :flock);
+use BerkeleyDB;
 */
 
 /**
@@ -76,14 +67,13 @@ our @EXPORT_OK = qw(
 
 # yyy bindallow(), binddeny() ????
 
-use Fcntl qw(:DEFAULT :flock);
-use BerkeleyDB;
-
 /**
  * Create and manage noids.
  */
 class Noid
 {
+    const VERSION = '1.0.0-0.424-php';
+
     const NOLIMIT = -1;
     const SEQNUM_MIN = 1;
     const SEQNUM_MAX = 1000000;
@@ -95,9 +85,11 @@ class Noid
      * We use "$R/" frequently as our "reserved root" prefix.
      *
      * Prefix for global top level of admin db variables
+     *
+     * @internal This is a constant unavailable from outside.
      * @var string
      */
-    protected $R = ":";
+    protected $_R = ':';
 
     /**
      * Global %opendbtab is a hash that maps a hashref (as key) to a database
@@ -108,7 +100,7 @@ class Noid
      *
      * @var array
      */
-    protected $opendbtab;
+    protected $_opendbtab = array();
 
     /**
      * To iterate over all Noids in the database, use
@@ -140,12 +132,86 @@ class Noid
     public $digitcount;
     public $locktest = 0;
 
+    /**
+     * Legal values of $how for the bind() function.
+     *
+     * @var array
+     */
+    protected $valid_hows = array(
+        'new', 'replace', 'set',
+        'append', 'prepend', 'add', 'insert',
+        'delete', 'purge', 'mint', 'peppermint',
+    );
+
+    /**
+     * Primes:
+     *   2        3        5        7
+     *  11       13       17       19
+     *  23       29       31       37
+     *  41       43       47       53
+     *  59       61       67       71
+     *  73       79       83       89
+     *  97      101      103      107
+     * 109      113      127      131
+     * 137      139      149      151
+     * 157      163      167      173
+     * 179      181      191      193
+     * 197      199      211      223
+     * 227      229      233      239
+     * 241      251      257      263
+     * 269      271      277      281
+     * 283      293      307      311
+     * 313      317      331      337
+     * 347      349      353      359
+     * 367      373      379      383
+     * 389      397      401      409
+     * 419      421      431      433
+     * 439      443      449      457
+     * 461      463      467      479
+     * 487      491      499      503  ...
+     */
+
+    /**
+     * yyy other character subsets? eg, 0-9, a-z, and _  (37 chars, with 37 prime)
+     *     this could be mask character 'w' ?
+     * yyy there are 94 printable ASCII characters, with nearest lower prime = 89
+     *     a radix of 89 would result in a huge, compact space with check chars
+     *     mask character 'c' ?
+     */
+
+    /**
+     * Extended digits array.  Maps ordinal value to ASCII character.
+     *
+     * @var array
+     */
+    protected $_xdig = array(
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'm', 'n',
+        'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'z',
+    );
+
+    /**
+     * Ordinal value hash for extended digits.  Maps ASCII characters to ordinals.
+     *
+     * @var array
+     */
+    protected $_ordxdig = array(
+        '0' =>  0,  '1' =>  1,  '2' =>  2,  '3' =>  3,  '4' =>  4,
+        '5' =>  5,  '6' =>  6,  '7' =>  7,  '8' =>  8,  '9' =>  9,
+
+        'b' => 10,  'c' => 11,  'd' => 12,  'f' => 13,  'g' => 14,
+        'h' => 15,  'j' => 16,  'k' => 17,  'm' => 18,  'n' => 19,
+
+        'p' => 20,  'q' => 21,  'r' => 22,  's' => 23,  't' => 24,
+        'v' => 25,  'w' => 26,  'x' => 27,  'z' => 28,
+    );
+
     public function __construct()
     {
         // Initialize some public values.
-        $legalstring = join('', $this->xdig);
-        $alphacount = strlen($this->legalstring);
-        $digitcount = 10;
+        $this->legalstring = join('', $this->_xdig);
+        $this->alphacount = strlen($this->legalstring);
+        $this->digitcount = 10;
     }
 
     /**
@@ -160,8 +226,8 @@ class Noid
      */
     public function addmsg($noid, $message)
     {
-        $noid ||= ""; # act like a global in case $noid undefined
-        $opendbtab{"msg/$noid"} .= $message . "\n";
+        $noid = $noid ?: ''; # act like a global in case $noid undefined
+        $this->_opendbtab{"msg/$noid"} .= $message . "\n";
         return 1;
     }
 
@@ -175,10 +241,10 @@ class Noid
      */
     public function errmsg($noid, $reset)
     {
-        $noid ||= ""; # act like a global in case $noid undefined
-        my $s = $opendbtab{"msg/$noid"};
+        $noid = $noid ?: ''; # act like a global in case $noid undefined
+        my $s = $this->_opendbtab{"msg/$noid"};
         $reset and
-            $opendbtab{"msg/$noid"} = "";
+            $this->_opendbtab{"msg/$noid"} = "";
         return $s;
     }
 
@@ -191,8 +257,8 @@ class Noid
      */
     public function logmsg($noid, $message)
     {
-        $noid ||= ""; # act like a global in case $noid undefined
-        my $logfhandle = $opendbtab{"log/$noid"};
+        $noid = $noid ?: ''; # act like a global in case $noid undefined
+        my $logfhandle = $this->_opendbtab{"log/$noid"};
         defined($logfhandle) and
             print($logfhandle $message, "\n");
         # yyy file was opened for append -- hopefully that means always
@@ -208,7 +274,7 @@ class Noid
      * @param string $contents
      * @return integer 0 (error) or 1 (success)
      */
-    public function storefile($fname, $contents)
+    protected function storefile($fname, $contents)
     {
         ! open(OUT, ">$fname") and
             return 0;
@@ -216,17 +282,6 @@ class Noid
         close(OUT);
         return 1;
     }
-
-    /**
-     * Legal values of $how for the bind() function.
-     *
-     * @var array
-     */
-    protected $valid_hows = array(
-        'new', 'replace', 'set',
-        'append', 'prepend', 'add', 'insert',
-        'delete', 'purge', 'mint', 'peppermint',
-    );
 
     //=======================================================================
     // --- begin alphabetic listing (with a few exceptions) of functions ---
@@ -246,6 +301,8 @@ class Noid
      */
      public function bind($noid, $contact, $validate, $how, $id, $elem, $value)
      {
+        $R = &$this->_R;
+
         # yyy to add: incr, decr for $how;  possibly other ops (* + - / **)
 
         # Validate identifier and element if necessary.
@@ -393,69 +450,6 @@ class Noid
     }
 
     /**
-     * Primes:
-     *   2        3        5        7
-     *  11       13       17       19
-     *  23       29       31       37
-     *  41       43       47       53
-     *  59       61       67       71
-     *  73       79       83       89
-     *  97      101      103      107
-     * 109      113      127      131
-     * 137      139      149      151
-     * 157      163      167      173
-     * 179      181      191      193
-     * 197      199      211      223
-     * 227      229      233      239
-     * 241      251      257      263
-     * 269      271      277      281
-     * 283      293      307      311
-     * 313      317      331      337
-     * 347      349      353      359
-     * 367      373      379      383
-     * 389      397      401      409
-     * 419      421      431      433
-     * 439      443      449      457
-     * 461      463      467      479
-     * 487      491      499      503  ...
-     */
-
-    /**
-     * yyy other character subsets? eg, 0-9, a-z, and _  (37 chars, with 37 prime)
-     *     this could be mask character 'w' ?
-     * yyy there are 94 printable ASCII characters, with nearest lower prime = 89
-     *     a radix of 89 would result in a huge, compact space with check chars
-     *     mask character 'c' ?
-     */
-
-    /**
-     * Extended digits array.  Maps ordinal value to ASCII character.
-     *
-     * @var array
-     */
-    protected $xdig = array(
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-        'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'm', 'n',
-        'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'z'
-    );
-
-    /**
-     * Ordinal value hash for extended digits.  Maps ASCII characters to ordinals.
-     *
-     * @var array
-     */
-    protected $ordxdig = array(
-        '0' =>  0,  '1' =>  1,  '2' =>  2,  '3' =>  3,  '4' =>  4,
-        '5' =>  5,  '6' =>  6,  '7' =>  7,  '8' =>  8,  '9' =>  9,
-
-        'b' => 10,  'c' => 11,  'd' => 12,  'f' => 13,  'g' => 14,
-        'h' => 15,  'j' => 16,  'k' => 17,  'm' => 18,  'n' => 19,
-
-        'p' => 20,  'q' => 21,  'r' => 22,  's' => 23,  't' => 24,
-        'v' => 25,  'w' => 26,  'x' => 27,  'z' => 28
-    );
-
-    /**
      * Compute check character for given identifier.  If identifier ends in '+'
      * (plus), replace it with a check character computed from the preceding chars,
      * and return the modified identifier.  If not, isolate the last char and
@@ -483,11 +477,11 @@ class Noid
         my $c;
         for $c (split('//', $id)) {
             # if character undefined, it's ordinal value is zero
-            $sum += $pos * (defined($ordxdig{"$c"}) ? $ordxdig{"$c"} : 0);
+            $sum += $pos * (defined($this->_ordxdig{"$c"}) ? $this->_ordxdig{"$c"} : 0);
             $pos++;
         }
-        my $checkchar = $xdig[$sum % $alphacount];
-        #print "RADIX=$alphacount, mod=", $sum % $alphacount, "\n";
+        my $checkchar = $this->_xdig[$sum % $this->alphacount];
+        #print "RADIX=$this->alphacount, mod=", $sum % $this->alphacount, "\n";
         return $id . $checkchar
             if ($lastchar eq "+" || $lastchar eq $checkchar);
         return undef;       # must be request to check, but failed match
@@ -511,10 +505,12 @@ class Noid
      * @param string $verbose
      * @return array
      */
-    public function clear_bindings($noid, $id, $verbose)
+    protected function clear_bindings($noid, $id, $verbose)
     {
+        $R = &$this->_R;
+
         my @retvals;
-        my $db = $opendbtab{"bdb/$noid"};
+        my $db = $this->_opendbtab{"bdb/$noid"};
         my $cursor = $db->db_cursor();
 
         # yyy right now "$id\t" defines how we bind stuff to an id, but in the
@@ -561,6 +557,8 @@ class Noid
      */
     public function dbcreate ($dbdir, $contact, $template, $term, $naan, $naa, $subnaa)
     {
+        $R = &$this->_R;
+
         my ($total, $noid);
         my $dir = "$dbdir/NOID";
         my $dbname = "$dir/noid.bdb";
@@ -659,7 +657,7 @@ class Noid
         $$noid{"$R/genonly"} = $genonly;
 
         $$noid{"$R/total"} = $total;
-        $$noid{"$R/padwidth"} = ($total == NOLIMIT ? 16 : 2) + length($mask);
+        $$noid{"$R/padwidth"} = ($total == self::NOLIMIT ? 16 : 2) + length($mask);
             # yyy kludge -- padwidth of 16 enough for most lvf sorting
 
         # Some variables:
@@ -672,11 +670,11 @@ class Noid
         $$noid{"$R/held"} = 0;
         $$noid{"$R/queued"} = 0;
 
-        $$noid{"$R/fseqnum"} = SEQNUM_MIN;  # see queue() and mint()
-        $$noid{"$R/gseqnum"} = SEQNUM_MIN;  # see queue()
+        $$noid{"$R/fseqnum"} = self::SEQNUM_MIN;  # see queue() and mint()
+        $$noid{"$R/gseqnum"} = self::SEQNUM_MIN;  # see queue()
         $$noid{"$R/gseqnum_date"} = 0;      # see queue()
 
-        $$noid{"$R/version"} = $VERSION;
+        $$noid{"$R/version"} = self::VERSION;
 
         # yyy should verify that a given NAAN and NAA are registered,
         #     and should offer to register them if not.... ?
@@ -773,20 +771,20 @@ class Noid
         s/-/_ not/ || s/./_____/
             for (@p);
         my $random_sample;          # undefined on purpose
-        $total == NOLIMIT and
+        $total == self::NOLIMIT and
             $random_sample = int(rand(10)); # first sample less than 10
         my $sample1 = sample($noid, $random_sample);
-        $total == NOLIMIT and
+        $total == self::NOLIMIT and
             $random_sample = int(rand(100000)); # second sample bigger
         my $sample2 = sample($noid, $random_sample);
 
-        my $htotal = ($total == NOLIMIT ? "unlimited" : human_num($total));
-        my $what = ($total == NOLIMIT ? "unlimited" : $total)
+        my $htotal = ($total == self::NOLIMIT ? "unlimited" : human_num($total));
+        my $what = ($total == self::NOLIMIT ? "unlimited" : $total)
             . qq@ $gen_type identifiers of form $template
         A Noid minting and binding database has been created that will bind
         @
             . ($genonly ? "" : "any identifier ") . "and mint "
-            . ($total == NOLIMIT ? qq@an unbounded number of identifiers
+            . ($total == self::NOLIMIT ? qq@an unbounded number of identifiers
         with the template "$template".@
             : $htotal . qq@ identifiers with the template "$template".@)
             . qq@
@@ -801,8 +799,8 @@ who:       $contact
 what:      $what
 when:      @ . temper() . qq@
 where:     $host:$cwd
-Version:   Noid $VERSION
-Size:      @ . ($total == NOLIMIT ? "unlimited" : $total) . qq@
+Version:   Noid {self::VERSION}
+Size:      @ . ($total == self::NOLIMIT ? "unlimited" : $total) . qq@
 Template:  @ . (! $template ? "(:none)" : $template . qq@
     A suggested parent directory for this template is "$synonym".  Note:
     separate minters need separate directories, and templates can suggest
@@ -853,7 +851,9 @@ EOD;
      */
     public function dbinfo ($noid, $level)
     {
-        my $db = $opendbtab{"bdb/$noid"};
+        $R = &$this->_R;
+
+        my $db = $this->_opendbtab{"bdb/$noid"};
         my $cursor = $db->db_cursor();
         my ($key, $value) = ("$R/", 0);
         if ($level eq "dump") {
@@ -898,7 +898,7 @@ EOD;
      * @todo eventually we would like to do fancy fine-grained locking with
      * @return integer 1.
      */
-    public function dblock()
+    protected function dblock()
     {
         // Placeholder.
         return 1;
@@ -910,7 +910,7 @@ EOD;
      * @todo eventually we would like to do fancy fine-grained locking with
      * @return integer 1.
      */
-    public function dbunlock()
+    protected function dbunlock()
     {
         // Placeholder.
         return 1;
@@ -1025,9 +1025,9 @@ EOD;
         # yyy how to set error code or return string?
         #   or die("Can't open database file: $!\n");
         #print "dbopen: returning hashref=$noid, db=$db\n";
-        $opendbtab{"bdb/$noid"} = $db;
-        $opendbtab{"msg/$noid"} = "";
-        $opendbtab{"log/$noid"} = ($log_opened ? $logfhandle : undef);
+        $this->_opendbtab{"bdb/$noid"} = $db;
+        $this->_opendbtab{"msg/$noid"} = "";
+        $this->_opendbtab{"log/$noid"} = ($log_opened ? $logfhandle : undef);
 
         $locktest and
             print("locktest: holding lock for $locktest seconds...\n"),
@@ -1058,10 +1058,10 @@ EOD;
      */
     public function dbclose($noid)
     {
-        undef $opendbtab{"msg/$noid"};
-        defined($opendbtab{"log/$noid"}) and
-            close($opendbtab{"log/$noid"});
-        undef $opendbtab{"bdb/$noid"};
+        undef $this->_opendbtab{"msg/$noid"};
+        defined($this->_opendbtab{"log/$noid"}) and
+            close($this->_opendbtab{"log/$noid"});
+        undef $this->_opendbtab{"bdb/$noid"};
         untie %$noid;
         // Let go of lock.
         close NOIDLOCK;
@@ -1080,11 +1080,11 @@ EOD;
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    public function eachnoid($noid, $key, $value)
+    protected function eachnoid($noid, $key, $value)
     {
         # yyy check that $db is tied?  this is assumed for now
         # yyy need to get next non-admin key/value pair
-        my $db = $opendbtab{"bdb/$noid"};
+        my $db = $this->_opendbtab{"bdb/$noid"};
         #was: my $flag = ($key ? R_NEXT : R_FIRST);
         # fix from Jim Fullton:
         my $flag = ($key ? DB_NEXT : DB_FIRST);
@@ -1119,6 +1119,8 @@ EOD;
      */
     public function fetch($noid, $verbose, $id, $elems)
     {
+        $R = &$this->_R;
+
         ! defined($id) and
             addmsg($noid, "error: " . ($verbose ? "fetch" : "get")
                 . " requires that an identifier be specified."),
@@ -1131,7 +1133,7 @@ EOD;
             . "Circ:  " . ($$noid{"$id\t$R/c"}
                 ? $$noid{"$id\t$R/c"} : "uncirculated") . "\n";
 
-        my $db = $opendbtab{"bdb/$noid"};
+        my $db = $this->_opendbtab{"bdb/$noid"};
         my $cursor = $db->db_cursor();
 
         if (empty($elems)) {  # No elements were specified, so find them.
@@ -1199,8 +1201,10 @@ EOD;
      * @param string $noid
      * @return string
      */
-    public function genid($noid)
+    protected function genid($noid)
     {
+        $R = &$this->_R;
+
         dblock();
 
         # Variables:
@@ -1214,7 +1218,7 @@ EOD;
 
         # yyy what are we going to do with counters for held? queued?
 
-        if ($$noid{"$R/oatop"} != NOLIMIT && $oacounter >= $$noid{"$R/oatop"}) {
+        if ($$noid{"$R/oatop"} != self::NOLIMIT && $oacounter >= $$noid{"$R/oatop"}) {
 
             # Critical test of whether we're willing to re-use identifiers
             # by re-setting (wrapping) the counter to zero.  To be extra
@@ -1308,8 +1312,10 @@ EOD;
      * Returns a single letter circulation status, which must be one
      * of 'i', 'q', or 'u'.  Returns the empty string on error.
      */
-    public function get_circ_svec($noid, $id)
+    protected function get_circ_svec($noid, $id)
     {
+        $R = &$this->_R;
+
         my $circ_rec = $$noid{"$id\t$R/c"};
         ! defined($circ_rec) and
             return '';
@@ -1352,8 +1358,10 @@ EOD;
      * @param string $contact
      * @return string|null
      */
-    public function set_circ_rec($noid, $id, $circ_svec, $date, $contact)
+    protected function set_circ_rec($noid, $id, $circ_svec, $date, $contact)
     {
+        $R = &$this->_R;
+
         my $status = 1;
         my $circ_rec = "$circ_svec|$date|$contact|" . $$noid{"$R/oacounter"};
 
@@ -1400,6 +1408,8 @@ EOD;
      */
     public function getnoid($noid, $varname)
     {
+        $R = &$this->_R;
+
         return $$noid{"$R/$varname"};
     }
 
@@ -1418,8 +1428,10 @@ EOD;
      * @return string
      */
     /*
-    public function count($noid, $direction)
+    protected function count($noid, $direction)
     {
+        $R = &$this->_R;
+
        $direction > 0
            and return ++$$noid{"$R/seqnum"};
        $direction < 0
@@ -1442,6 +1454,8 @@ EOD;
      */
     public function hold($noid, $contact, $on_off, array $ids)
     {
+        $R = &$this->_R;
+
         # yyy what makes sense in this case?
         #! $$noid{"$R/template"} and
         #   addmsg($noid,
@@ -1514,9 +1528,11 @@ EOD;
      */
     public function hold_set($noid, $id)
     {
+        $R = &$this->_R;
+
         $$noid{"$id\t$R/h"} = 1;        # value doesn't matter
         $$noid{"$R/held"}++;
-        if ($$noid{"$R/total"} != NOLIMIT   # ie, if total is non-zero
+        if ($$noid{"$R/total"} != self::NOLIMIT   # ie, if total is non-zero
                 && $$noid{"$R/held"} > $$noid{"$R/oatop"}) {
             my $m = "error: hold count (" . $$noid{"$R/held"}
                 . ") exceeding total possible on id $id";
@@ -1539,6 +1555,8 @@ EOD;
      */
     public function hold_release($noid, $id)
     {
+        $R = &$this->_R;
+
         delete($$noid{"$id\t$R/h"});
         $$noid{"$R/held"}--;
         if ($$noid{"$R/held"} < 0) {
@@ -1558,7 +1576,7 @@ EOD;
      * @param integer $num
      * @return string
      */
-    public function human_num($num)
+    protected function human_num($num)
     {
         $num ||= 0;
         my $numstr = sprintf("%u", $num);
@@ -1579,8 +1597,10 @@ EOD;
      * @param string $elem
      * @return string
      */
-    public function id2elemval($cursor, $verbose, $id, $elem)
+    protected function id2elemval($cursor, $verbose, $id, $elem)
     {
+        $R = &$this->_R;
+
         my $first = "$R/idmap/$elem\t";
         my ($key, $value) = ($first, 0);
         my $status = $cursor->c_get($key, $value, DB_SET_RANGE);
@@ -1613,8 +1633,10 @@ EOD;
      * @param string $noid
      * @return void
      */
-    public function init_counters($noid)
+    protected function init_counters($noid)
     {
+        $R = &$this->_R;
+
         # Variables:
         #   oacounter   overall counter's current value (last value minted)
         #   saclist (sub) active counters list
@@ -1680,8 +1702,10 @@ EOD;
      * @param string $pepper
      * @return string|null
      */
-    public function mint($noid, $contact, $pepper)
+    public function mint($noid, $contact, $pepper = 0)
     {
+        $R = &$this->_R;
+
         ! defined($contact) and
             addmsg($noid, "contact undefined"),
             return undef;
@@ -1696,7 +1720,7 @@ EOD;
         #
         my $currdate = temper();        # fyi, 14 digits long
         my $first = "$R/q/";
-        my $db = $opendbtab{"bdb/$noid"};
+        my $db = $this->_opendbtab{"bdb/$noid"};
         ! (my $cursor = $db->db_cursor()) and
             addmsg($noid, "couldn't create cursor"),
             return undef;
@@ -1721,8 +1745,8 @@ EOD;
             ($qdate) = ($key =~ m|$R/q/(\d{14})|);
             ! defined($qdate) and           # nothing in queue
                 # this is our chance -- see queue() comments for why
-                ($$noid{"$R/fseqnum"} > SEQNUM_MIN and
-                    $$noid{"$R/fseqnum"} = SEQNUM_MIN),
+                ($$noid{"$R/fseqnum"} > self::SEQNUM_MIN and
+                    $$noid{"$R/fseqnum"} = self::SEQNUM_MIN),
                 last;               # so move on
             # If the date of the earliest item to re-use hasn't arrived
             $currdate < $qdate and
@@ -1915,7 +1939,9 @@ EOD;
      */
     public function note($noid, $contact, $key, $value)
     {
-        my $db = $opendbtab{"bdb/$noid"};
+        $R = &$this->_R;
+
+        my $db = $this->_opendbtab{"bdb/$noid"};
         dblock();
         my $status = $db->db_put("$R/$R/$key", $value);
         dbunlock();
@@ -1958,10 +1984,10 @@ EOD;
                     || $c =~ /[rs]/ # terminate on r or s even if
                     and last;   # $num is not all used up yet
                 $c =~ /e/ and
-                    $div = $alphacount
+                    $div = $this->alphacount
                 or
                 $c =~ /d/ and
-                    $div = $digitcount
+                    $div = $this->digitcount
                 or
                 $c =~ /z/ and
                     $varwidth = 1   # re-uses last $div value
@@ -1976,10 +2002,10 @@ EOD;
                 #     $c eq 'r' || $c eq 's'
                 #     and last;   # $num is not all used up yet
                 # $c eq 'e' and
-                #     $div = $alphacount
+                #     $div = $this->alphacount
                 # or
                 # $c eq 'd' and
-                #     $div = $digitcount
+                #     $div = $this->digitcount
                 # or
                 # $c eq 'z' and
                 #     $varwidth = 1   # re-uses last $div value
@@ -1992,7 +2018,7 @@ EOD;
             }
             $remainder = $num % $div;
             $num = int($num / $div);
-            $s = $xdig[$remainder] . $s;
+            $s = $this->_xdig[$remainder] . $s;
         }
         $mask =~ /k$/ and       # if it ends in a check character
             $s .= "+";      # represent it with plus in new id
@@ -2034,7 +2060,7 @@ EOD;
         ! $template || $template eq "-" and
             $$msg = "parse_template: no minting possible.",
             $_[1] = $_[2] = $_[3] = "",
-            return NOLIMIT;
+            return self::NOLIMIT;
         $template !~ /^([^\.]*)\.(\w+)/ and
             $$msg = "parse_template: no template mask - "
                 . "can't generate identifiers.",
@@ -2063,10 +2089,10 @@ EOD;
         my $c;
         my $has_cc = ($mask =~ /k$/);
         for $c (split '//', $prefix) {
-            if ($has_cc && $c ne '/' && ! exists($ordxdig{$c})) {
+            if ($has_cc && $c ne '/' && ! exists($this->_ordxdig{$c})) {
                 $$msg = "parse_template: with a check character "
                     . "at the end, a mask may contain only "
-                    . qq@characters from "$legalstring".@;
+                    . qq@characters from "$this->legalstring".@;
                 return 0;
             }
         }
@@ -2091,10 +2117,10 @@ EOD;
         for $c (split //, $mask) {
             # Mask chars it could be are: d e k
             $c =~ /e/ and
-                $total *= $alphacount
+                $total *= $this->alphacount
             or
             $c =~ /d/ and
-                $total *= $digitcount
+                $total *= $this->digitcount
             or
             $c =~ /[krsz]/ and
                 next
@@ -2105,7 +2131,7 @@ EOD;
         $_[2] = $mask;
         $_[3] = $gen_type = ($mask =~ /^r/ ? "random" : "sequential");
         # $_[4] was set to the synonym already
-        return ($mask =~ /^z/ ? NOLIMIT : $total);
+        return ($mask =~ /^z/ ? self::NOLIMIT : $total);
     }
 
     /**
@@ -2165,6 +2191,8 @@ EOD;
      */
     public function queue($noid, $contact, $when, array $ids)
     {
+        $R = &$this->_R;
+
         ! $$noid{"$R/template"} and
             addmsg($noid,
                 "error: queuing makes no sense in a bind-only minter."),
@@ -2217,7 +2245,7 @@ EOD;
 
         defined($qdate) and     # current time plus optional delay
             ($qdate > $$noid{"$R/gseqnum_date"} and
-                $seqnum = $$noid{"$R/gseqnum"} = SEQNUM_MIN,
+                $seqnum = $$noid{"$R/gseqnum"} = self::SEQNUM_MIN,
                 $$noid{"$R/gseqnum_date"} = $qdate,
             1 or
                 $seqnum = $$noid{"$R/gseqnum"}),
@@ -2295,12 +2323,12 @@ EOD;
 
             ($idval = $id) =~ s/^$firstpart//;
             $paddedid = sprintf("%0$padwidth" . "s", $idval);
-            $fixsqn = sprintf("%06d", $seqnum % SEQNUM_MAX);
+            $fixsqn = sprintf("%06d", $seqnum % self::SEQNUM_MAX);
 
             dblock();
 
             $$noid{"$R/queued"}++;
-            if ($$noid{"$R/total"} != NOLIMIT   # if total is non-zero
+            if ($$noid{"$R/total"} != self::NOLIMIT   # if total is non-zero
                     && $$noid{"$R/queued"} > $$noid{"$R/oatop"}) {
 
                 dbunlock();
@@ -2345,10 +2373,12 @@ EOD;
      */
     public function sample($noid, $num)
     {
+        $R = &$this->_R;
+
         my $upper;
         ! defined($num) and
             $upper = $$noid{"$R/total"},
-            ($upper == NOLIMIT and $upper = 100000),
+            ($upper == self::NOLIMIT and $upper = 100000),
             $num = int(rand($upper));
         my $mask = $$noid{"$R/mask"};
         my $firstpart = $$noid{"$R/firstpart"};
@@ -2364,6 +2394,8 @@ EOD;
      */
     public function scope($noid)
     {
+        $R = &$this->_R;
+
         ! $$noid{"$R/template"} and
             print("This minter does not generate identifiers, but it\n"
                 . "does accept user-defined identifier and element "
@@ -2414,7 +2446,7 @@ EOD;
      * @param integer $time
      * @return string
      */
-    public function temper($time)
+    protected function temper($time)
     {
         my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdat)
             = localtime(defined($time) ? $time : time());
@@ -2441,6 +2473,8 @@ EOD;
      */
     public function validate($noid, $template, array $ids)
     {
+        $R = &$this->_R;
+
         my ($first, $prefix, $mask, $gen_type, $msg);
         my @retvals;
 
@@ -2522,7 +2556,7 @@ EOD;
                     push(@retvals, "iderr: $id longer than "
                         . "specified template ($template)"),
                     next ID;
-                $m =~ /e/ && $legalstring !~ /$c/ and
+                $m =~ /e/ && $this->legalstring !~ /$c/ and
                     push(@retvals, "iderr: $id char '$c' conflicts"
                         . " with template ($template)"
                         . " char '$m' (extended digit)"),
