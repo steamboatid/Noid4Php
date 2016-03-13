@@ -90,9 +90,9 @@ In Perl, before 5.20.0 (May 2014), rand() calls drand48(), random() or rand()
 from the C library stdlib.h in that order. Since 5.20.0, drand48() is
 implemented. In Php, rand() uses the underlying C library's rand (see [rosettacode.org]).
 
-So, to produce the same sequence, the default random generator is the perl one,
-run from the command line. This is not an issue in most of the cases, because
-perl is installed by default on all major distributions and servers.
+So, the process uses an emulator of the rand() function based on the ground of
+the C code (Perl_Random). The use of the Perl rand() is possible via the class
+Noid. Anyway, the result will be the same.
 
 * Database
 
@@ -115,10 +115,8 @@ perl is installed by default on all major distributions and servers.
 
 * To do
 
-  - Port the pseudo-generator processor from perl (c) into php.
   - Optimize structure and process, but keep inputs, calls, and outputs.
   - Seperate creation of noids and management of bindings.
-  - Use the perl pseudo-random generator to create identical noids via php.
   - Use other standard or flat db engines (mysql and simple file).
   - See other todo in the perl or php scripts.
 
@@ -199,6 +197,8 @@ and, more generally, to use and operate it in the same conditions of security.
 This Agreement may be freely reproduced and published, provided it is not
 altered, and that no provisions are either added or removed herefrom.
 
+* Contains Perl_Random, published under the [CeCILL-C v1.0].
+
 
 Contact
 -------
@@ -220,4 +220,5 @@ Current maintainers:
 [rosettacode.org]: https://rosettacode.org/wiki/Random_number_generator_%28included%29#Perl
 [issues]: https://github.com/Daniel-KM/Noid4Php/issues
 [CeCILL-B v1.0]: https://www.cecill.info/licences/Licence_CeCILL-B_V1-en.txt
+[CeCILL-C v1.0]: https://www.cecill.info/licences/Licence_CeCILL-C_V1-en.txt
 [Daniel-KM]: https://github.com/Daniel-KM "Daniel Berthereau"
