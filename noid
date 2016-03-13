@@ -53,14 +53,18 @@
 
 require_once 'lib/Noid.php';
 
+global $web;
 $web = 0;
 
+global $dbdir;
 $dbdir = null;
+
+global $dbname;
 $dbname = null;
 
-$debug = null;
 $bulkcmd = 0;
 
+// Not used.
 $template = null;
 $snaa = null;
 $total = null;
@@ -106,6 +110,8 @@ $do = new NoidDo();
  */
 global $stderr;
 $stderr = STDERR;
+
+global $contact;
 
 // If called with the URL interface.
 if (preg_match('|noidu[^/]*$|', $argv[0])) {
@@ -157,7 +163,7 @@ if ($options === false) {
 
 $args = $do->getOnlyArguments($args, $options);
 $options = $do->unifyOptionsAsLong($options);
-$debug = isset($options['debug']) ? $options['debug'] : $debug;
+
 if (isset($options['locktest'])) {
     $locktest = (integer) $options['locktest'];
     if ($locktest < 0) {
@@ -167,7 +173,8 @@ if (isset($options['locktest'])) {
     }
     $do->command('locktest', $locktest);
 }
-if ($web && $debug) {
+
+if ($web && !empty($options['debug'])) {
     print "contact=$contact, pwd=" . getcwd();
 }
 
@@ -231,7 +238,7 @@ $dbname = "$dbdir/NOID/noid.bdb";
 # If we're _not_ in bulk command mode, expect a single command
 # represented by the remaining arguments; do it and exit.
 #
-$bulkcmd = count($args) == 2 && $args[1] == '-';
+$bulkcmd = $bulkcmd || (count($args) == 2 && $args[1] == '-');
 if (!$bulkcmd) {
     // Remove the command itself.
     unset($args[0]);
@@ -247,9 +254,7 @@ if (!$bulkcmd) {
 #     to always put +'s for spaces
 #
 # NOTE The delimiter is the '"', even missing, but command line allows "'" too.
-// TODO Finalize bulk command.
-while (($line = STDIN)) {
-    $args = str_getcsv($line, ' ', '"');
+while ($args = fgetcsv(STDIN, ' ', '"')) {
     $do->command($args);
 }
 exit(0);
@@ -302,6 +307,8 @@ class NoidDo
     public function command($args = array())
     {
         global $stderr;
+        global $web;
+        global $dbname;
 
         # Any remaining args should form a noid command.
         # Look at the command part (if any) now, and complain about
@@ -364,12 +371,14 @@ class NoidDo
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    public function bind($how, $id, $elem = '', $value = null)
+    public function bind($how = null, $id = null, $elem = null, $value = null)
     {
         global $stderr;
+        global $dbname;
+        global $contact;
 
         $validate = 1;
-        $noid = Noid::dbopen($dbname, 0);
+        $noid = Noid::dbopen($dbname, Noid::DB_WRITE);
         if (!$noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
@@ -386,33 +395,36 @@ class NoidDo
                 return 0;
             }
 
-            # To slurp paragraph, apparently safest to use local $/, which
-            # disappears when scope exits.
-            $slurp = PHP_EOL . PHP_EOL; # Means paragraph mode.
-            $para = trim(fgets(STDIN)); // reads one line from STDIN
-            $para = preg_replace('/^#.*\n/g', '', $para); # remove comment lines
-            $para = preg_replace('/\n\s+/g', ' ', $para); # merge continuation lines
-            $elemvals = preg_split('/^([^:]+)\s*:\s*/m', $para);
+            // Slurp a paragraph (double end of line).
+            // Multilines input from command line: loop until two end of lines.
+            $input = '';
+            $eol = 0;
+            do {
+                $line = fgets(STDIN); // reads one line from STDIN
+                // Check if this is a double end of line (without white spaces).
+                $line == PHP_EOL ? $eol++ : $eol = 0;
+                $input .= $line;
+            } while ($eol < 1); # Means paragraph mode.
+            $para = trim($input);
+            // Only the first comment is removed.
+            $para = preg_replace('/^#.*\n/', '', $para); # remove comment lines
+            $para = preg_replace('/\n\s+/', ' ', $para); # merge continuation lines
+            // Keep only lines with at least one ":".
+            $elemvals = preg_split('/^([^:]+)\s*:\s*/m', $para, -1, PREG_SPLIT_DELIM_CAPTURE);
             array_shift($elemvals); # throw away first null
             $bound = 0;
             $total = 0;
-            while (1) {
-                $elem = array_shift($elemvals);
-                $value = array_shift($elemvals);
-                if ($elem === false && $value === false) {
+            while (true) {
+                $elem = trim(array_shift($elemvals));
+                $value = trim(array_shift($elemvals));
+                if (strlen($elem) == 0 && strlen($value) == 0) {
                     break;
                 }
                 $total++;
-                if ($elem === false) {
+                if (strlen($elem) == 0) {
                     Noid::addmsg($noid,
                         sprintf('error: %s: bad element associated with value "%s".', $id, $value));
                     break;
-                }
-                if ($value === false) {
-                    $value = '';
-                }
-                else {
-                    trim($value);
                 }
                 $report = Noid::bind($noid, $contact, $validate,
                     $how, $id, $elem, $value);
@@ -423,7 +435,7 @@ class NoidDo
                 }
                 else {
                     $bound++;
-                    print($report . PHP_EOL);
+                    print $report . PHP_EOL;
                 }
             }
             # yyy summarize for log $total and $bound
@@ -437,6 +449,7 @@ class NoidDo
                 Noid::dbclose($noid);
                 return 0;
             }
+            // Commented in the Perl script.
     #        while (<STDIN>) {
     #            if ('/^#/' || '/^\s*\n/') {
     #                continue;
@@ -457,7 +470,9 @@ class NoidDo
 
             # Read all of STDIN into array "@input_lines".
             # And remove all newlines.
-            $input_lines = file(STDIN, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            $input_lines = file_get_contents('php://stdin', 'r');
+            $input_lines = explode(PHP_EOL, trim($input_lines));
+            $input_lines = array_map('trim', $input_lines);
 
             # Ignore any leading lines that start with a pound sign
             # or contain nothing but white space.
@@ -519,7 +534,7 @@ class NoidDo
             $this->usage(0, 1, 'bind');
         }
         else {
-            print($report . PHP_EOL);
+            print $report . PHP_EOL;
         }
         # yyy make sure return(0)'s do dbclose...
         Noid::dbclose($noid);
@@ -536,8 +551,11 @@ class NoidDo
      * @param string $subnaa
      * @return integer 0 (error) or 1 (success)
      */
-    public function dbcreate($template, $policy, $naan, $naa, $subnaa)
+    public function dbcreate($template = null, $policy = null, $naan = null, $naa = null, $subnaa = null)
     {
+        global $dbdir;
+        global $contact;
+
         $dbreport = Noid::dbcreate($dbdir, $contact, $template, $policy,
             $naan, $naa, $subnaa);
         if (!$dbreport) {
@@ -554,12 +572,14 @@ class NoidDo
      * @param string $level
      * @return integer 0 (error) or 1 (success)
      */
-    public function dbinfo($level = 'brief')
+    public function dbinfo($level = null)
     {
+        global $dbname;
+
         if (empty($level)) {
             $level = 'brief';
         }
-        $noid = Noid::dbopen($dbname, DB_RDONLY);
+        $noid = Noid::dbopen($dbname, Noid::DB_RDONLY);
         if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
@@ -573,11 +593,16 @@ class NoidDo
      * Fetch elements.
      *
      * @param string $id
-     * @param array $elems
-     * @return array
+     * @param array|string $elems All arguments will be fetchedif not an array.
+     * @return integer 0 (error) or 1 (success)
      */
-    public function fetch($id, $elems)
+    public function fetch($id = null, $elems = array())
     {
+        if (!is_array($elems)) {
+            $elems = func_get_args();
+            array_shift($elems);
+        }
+
         return $this->_getfetch(1, $id, $elems);
     }
 
@@ -585,11 +610,16 @@ class NoidDo
      * Get elements.
      *
      * @param string $id
-     * @param array $elems
-     * @return array
+     * @param array|string $elems All arguments will be gotten if not an array.
+     * @return integer 0 (error) or 1 (success)
      */
-    public function get($id, $elems)
+    public function get($id = null, $elems = array())
     {
+        if (!is_array($elems)) {
+            $elems = func_get_args();
+            array_shift($elems);
+        }
+
         return $this->_getfetch(0, $id, $elems);
     }
 
@@ -599,13 +629,14 @@ class NoidDo
      * @param integer $verbose
      * @param string $id
      * @param array $elems
-     * @return array
+     * @return integer 0 (error) or 1 (success)
      */
     protected function _getfetch($verbose, $id, $elems)
     {
         global $stderr;
+        global $dbname;
 
-        $noid = Noid::dbopen($dbname, DB_RDONLY);
+        $noid = Noid::dbopen($dbname, Noid::DB_RDONLY);
         if (! $noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
@@ -638,7 +669,7 @@ class NoidDo
      * Return help about a command.
      *
      * @param string $topic
-     * @return integer 1
+     * @return integer 1 (success)
      */
     public function help($topic = '')
     {
@@ -656,15 +687,22 @@ class NoidDo
     /**
      * Hold ids.
      *
-     * @param integer $on_off
-     * @param array $ids
+     * @param string $on_off "hold" or "release"
+     * @param array|string $ids All arguments will be processed if not an array.
      * @return integer 0 (error) or 1 (success)
      */
-    public function hold($on_off, $ids)
+    public function hold($on_off = null, $ids = array())
     {
         global $stderr;
+        global $dbname;
+        global $contact;
 
-        $noid = Noid::dbopen($dbname, 0);
+        if (!is_array($ids)) {
+            $ids = func_get_args();
+            array_shift($ids);
+        }
+
+        $noid = Noid::dbopen($dbname, Noid::DB_WRITE);
         if (!$noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
@@ -686,11 +724,11 @@ class NoidDo
      * @param string $n
      * @param string $elem
      * @param string $value
-     * @return string
+     * @return integer 0 (error) or 1 (success)
      */
-    public function peppermint($n, $elem, $value)
+    public function peppermint($n = 0, $elem = null, $value = null)
     {
-        mint($n, $elem, $value, 1);
+        return $this->mint($n, $elem, $value, 1);
     }
 
     /**
@@ -700,11 +738,13 @@ class NoidDo
      * @param string $elem
      * @param string $value
      * @param boolean $pepper
-     * @return string
+     * @return integer 0 (error) or 1 (success)
      */
-    public function mint($n = null, $elem, $value, $pepper = false)
+    public function mint($n = null, $elem = null, $value = null, $pepper = 0)
     {
         global $stderr;
+        global $dbname;
+        global $contact;
 
         if ($pepper) {
             fwrite($stderr,
@@ -717,7 +757,7 @@ class NoidDo
             $this->usage(1, 1, 'mint');
             return 0;
         }
-        $noid = Noid::dbopen($dbname, 0);
+        $noid = Noid::dbopen($dbname, Noid::DB_WRITE);
         if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
@@ -746,14 +786,16 @@ class NoidDo
     public function note($key = '', $value = '')
     {
         global $stderr;
+        global $dbname;
+        global $contact;
 
-        if (empty($key) || empty($value)) {
+        if (!strlen($key) || !strlen($value)) {
             fwrite($stderr,
                 'You must supply a key and a value.' . PHP_EOL);
             $this->usage(1, 1, 'note');
             return 0;
         }
-        $noid = Noid::dbopen($dbname, 0);
+        $noid = Noid::dbopen($dbname, Noid::DB_WRITE);
         if (!Noid::note($noid, $contact, $key, $value)) {
             print Noid::errmsg($noid);
         }
@@ -765,14 +807,21 @@ class NoidDo
      * Queue.
      *
      * @param string $when
-     * @param array $ids
+     * @param array|string $ids All arguments will be queued if not an array.
      * @return integer 0 (error) or 1 (success)
      */
-    public function queue($when, $ids)
+    public function queue($when = null, $ids = array())
     {
         global $stderr;
+        global $dbname;
+        global $contact;
 
-        $noid = Noid::dbopen($dbname, 0);
+        if (!is_array($ids)) {
+            $ids = func_get_args();
+            array_shift($ids);
+        }
+
+        $noid = Noid::dbopen($dbname, Noid::DB_WRITE);
         if (!$noid) {
             fwrite($stderr, Noid::errmsg($noid));
             return 0;
@@ -780,7 +829,7 @@ class NoidDo
         $queued = Noid::queue($noid, $contact, $when, $ids);
         if (empty($queued)) {
             $retval = 0;
-            fwrite($stderr, Noid::errmsg($noid . PHP_EOL));
+            fwrite($stderr, Noid::errmsg($noid) . PHP_EOL);
         }
         else {
             $retval = 1;
@@ -797,14 +846,20 @@ class NoidDo
      * Returns the number of valid ids.
      *
      * @param string $template
-     * @param array $ids
+     * @param array|string $ids All arguments will be validated if not an array.
      * @return integer 0 (error) or 1 (success)
      */
-    public function validate($template, $ids)
+    public function validate($template = null, $ids = array())
     {
         global $stderr;
+        global $dbname;
 
-        $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (!is_array($ids)) {
+            $ids = func_get_args();
+            array_shift($ids);
+        }
+
+        $noid = Noid::dbopen($dbname, Noid::DB_RDONLY);
         if (!$noid) {
             print Noid::errmsg($noid);
             return 0;
@@ -851,6 +906,7 @@ class NoidDo
     public function usage($in_error = null, $brief = null, $topic = null)
     {
         global $stderr;
+
         $info = &$this->_info;
 
         if (is_null($in_error)) {
