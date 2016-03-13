@@ -684,7 +684,7 @@ class Noid
         $values = _dba_fetch_range($first, $db);
         if ($values) {
             foreach ($values as $key => $value) {
-                $skip = preg_match("|^$first$R/|", $key);
+                $skip = preg_match('|^' . preg_quote("$first$R/", '|') . '|', $key);
                 if (!$skip && $verbose) {
                     # if $verbose (ie, fetch), include label and
                     # remember to strip "Id\t" from front of $key
@@ -1048,7 +1048,7 @@ NAAN:      $naan
         }
 
         $values = _dba_fetch_range("$R/", $db);
-        if (empty($values)) {
+        if (is_null($values)) {
             self::addmsg($noid, sprintf('No values returned by the database.'));
             return 0;
         }
@@ -1075,7 +1075,7 @@ NAAN:      $naan
         print 'Admin Values' . PHP_EOL;
         foreach ($values as $key => $value) {
             if ($level === 'full'
-                    || !preg_match("|^$R/c\d|", $key)
+                    || !preg_match('|^' . preg_quote("$R/c", '|') . '\d|', $key)
                     && strpos($key, "$R/$R/") !== 0
                     && strpos($key, "$R/saclist") !== 0
                     && strpos($key, "$R/recycle/") !== 0
@@ -1421,7 +1421,7 @@ NAAN:      $naan
             $values = _dba_fetch_range($first, $db);
             if ($values) {
                 foreach ($values as $key => $value) {
-                    $skip = preg_match("|^$first$R/|", $key);
+                    $skip = preg_match('|^' . preg_quote("$first$R/", '|') . '|', $key);
                     if (!$skip) {
                         # if $verbose (ie, fetch), include label and
                         # remember to strip "Id\t" from front of $key
@@ -1670,7 +1670,7 @@ NAAN:      $naan
         #       yyy pepper not implemented yet
         # If issuing a longterm id, we automatically place a hold on it.
         #
-        if (substr($circ_svec, 0, 1) == 'i') {
+        if (strpos($circ_svec, 'i') === 0) {
             self::_clear_bindings($noid, $id, 0);
             dba_delete("$id\t$R/p", $db);
             if (dba_fetch("$R/longterm", $db)) {
@@ -1958,12 +1958,12 @@ NAAN:      $naan
             return '';
         }
         foreach ($values as $key => $value) {
-            $pattern = preg_match("|$first(.+)|", $key) ? $key : null;
+            $pattern = preg_match('|' . preg_quote($first, '|') . '(.+)|', $key) ? $key : null;
             $newval = $id;
             if (!empty($pattern)) {
                 try {
                     # yyy kludgy use of unlikely delimiters (ascii 05: Enquiry)
-                    $newval = preg_replace(chr(5) . $pattern . chr(5), $value, $newval);
+                    $newval = preg_replace(chr(5) . preg_quote($pattern, chr(5)) . chr(5), $value, $newval);
                 } catch (Exception $e) {
                     return sprintf('error: id2elemval eval: %s', $e->getMessage());
                 }
@@ -2091,11 +2091,12 @@ NAAN:      $naan
         #
         $values = _dba_fetch_range($first, $db);
         foreach ($values as $key => $value) {
+            $id = &$value;
             # The cursor, key and value are now set at the first item
             # whose key is greater than or equal to $first.  If the
             # queue was empty, there should be no items under "$R/q/".
             #
-            $qdate = preg_match("|$R/q/(\d{14})|", $key) ? $key : null;
+            $qdate = preg_match('|' . preg_quote("$R/q/", '|') . '(\d{14})|', $key, $matches) ? $matches[1] : null;
             if (empty($qdate)) {           # nothing in queue
                 # this is our chance -- see queue() comments for why
                 if (dba_fetch("$R/fseqnum", $db) > self::SEQNUM_MIN) {
@@ -2195,7 +2196,7 @@ NAAN:      $naan
             # will convert it to a check character.
             #
             $id = self::_genid($noid);
-            if (empty($id)) {
+            if (is_null($id)) {
                 return;
             }
 
@@ -2350,7 +2351,7 @@ NAAN:      $naan
         while ($num != 0 || ! $varwidth) {
             if (! $varwidth) {
                 $c = array_shift($rmask);  # check next mask character,
-                if (empty($c)
+                if (is_null($c)
                         || $c === 'r'
                         || $c === 's'
                     ) { # terminate on r or s even if
@@ -2706,7 +2707,7 @@ NAAN:      $naan
                     ($delete ? 'u' : 'q') . $circ_svec,
                     $currdate, $contact);
 
-            $idval = preg_replace("/^$firstpart/", '', $id);
+            $idval = preg_replace('/^' . preg_quote("$firstpart", '/') . '/', '', $id);
             $paddedid = sprintf("%0$padwidth" . "s", $idval);
             $fixsqn = sprintf("%06d", $seqnum % self::SEQNUM_MAX);
 
@@ -2931,15 +2932,12 @@ NAAN:      $naan
         }
 
         $id = null;
-        $maskchars = array();
         $c = null;
-        $m = null;
-        $varpart = null;
-        $m = substr($mask, -1) === 'k' ? substr($mask, -1) : $mask;
+        $m = preg_replace('/k$/', '', $mask);
         $should_have_checkchar = $m !== $mask;
         $naan = dba_fetch("$R/naan", $db);
         foreach ($ids as $id) {
-            if (empty($id) || trim($id) == '') {
+            if (is_null($id) || trim($id) == '') {
                 $retvals[] = "iderr: can't validate an empty identifier";
                 continue;
             }
@@ -2950,7 +2948,7 @@ NAAN:      $naan
             # element, Idpattern, and value, ReplacementPattern.
             #
             if (strpos("$R/", $id) === 0) {
-                $retvals[] = preg_match("|^$R/idmap/.+|", $id)
+                $retvals[] = preg_match('|^' . preg_quote("$R/idmap/", '|') . '.+|', $id)
                     ? sprintf('id: %s', $id)
                     : sprintf('iderr: identifiers must not start with "%s".', "$R/");
                 continue;
@@ -2961,7 +2959,7 @@ NAAN:      $naan
                 $first .= '/';
             }
             $first .= $prefix;          # ... if any
-            $varpart = preg_replace('/^$first/', '', $id);
+            $varpart = preg_replace('/^' . preg_quote($first, '/') . '/', '', $id);
             if (strpos($id, $first) !== 0) {
             # yyy            ($varpart = $id) !~ s/^$prefix// and
                 $retvals[] = sprintf('iderr: %s should begin with %s.', $id, $first);
@@ -2990,18 +2988,18 @@ NAAN:      $naan
             $flagBreakContinue = false;
             foreach (str_split($varpart) as $c) {
                 $m = array_shift($maskchars);
-                if (empty($m)) {
+                if (is_null($m)) {
                     $retvals[] = sprintf('iderr: %s longer than specified template (%s)', $id, $template);
                     $flagBreakContinue = true;
                     break;
                 }
-                if ($m === 'e' && !preg_match("/$c/", self::$legalstring)) {
+                if ($m === 'e' && strpos(self::$legalstring, $c) === false) {
                     $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (extended digit)',
                         $id, $c, $template, $m);
                     $flagBreakContinue = true;
                     break;
                 }
-                elseif ($m === 'e' && !preg_match("/$c/", '0123456789')) {
+                elseif ($m === 'd' && strpos('0123456789', $c) === false) {
                     $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (digit)',
                          $id, $c, $template, $m);
                     $flagBreakContinue = true;
@@ -3013,7 +3011,7 @@ NAAN:      $naan
             }
 
             $m = array_shift($maskchars);
-            if (empty($m)) {
+            if (!is_null($m)) {
                 $retvals[] = sprintf('iderr: %s shorter than specified template (%s)', $id, $template);
                 continue;
             }
