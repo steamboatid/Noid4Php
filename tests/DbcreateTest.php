@@ -1,80 +1,174 @@
-# Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl dbcreate.t'
+<?php
+/**
+ * @author Michael A. Russell
+ * @author Daniel Berthereau (conversion to Php)
+ * @package Noid
+ */
 
-#########################
+/**
+ * Tests for Noid (DBCreate).
+ *
+ * Note on Perl script.
+ * Before `make install' is performed this script should be runnable with
+ * `make test'. After `make install' it should work as `perl dbcreate.t'
+ */
+class NoidDbCreateTest extends PHPUnit_Framework_TestCase
+{
+    public $dir;
+    public $rm_cmd;
+    public $noid_cmd;
+    public $noid_dir;
 
-# change 'tests => 1' to 'tests => last_test_to_print';
+    public function setUp()
+    {
+        $this->dir = getcwd();
+        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
+        $noid_bin = 'blib/script/noid';
+        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
+        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
+        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
 
-use Noid;
+        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
+    }
 
-$ENV{'SHELL'} = "/bin/sh";
-my ($report, $erc);
+    public function tearDown()
+    {
+        $dbname = $this->noid_dir . 'noid.bdb';
+        if (file_exists($dbname)) {
+            Noid::dbclose($dbname);
+        }
+    }
 
-sub short { my( $template )=@_;
-	system("/bin/rm -rf ./NOID > /dev/null 2>&1 ");
-	$report = Noid::dbcreate(".", "jak", $template, "short");
-	! defined($report) and
-		return(Noid::errmsg());
-	open(IN, "<NOID/README") or
-		die("can't open README: $!");
-	local $/;
-	$erc = <IN>;
-	close(IN);
-	return($erc);
-	#return `./noid dbcreate $template short 2>&1`;
-}
+    protected function _short($template, $return = 'erc')
+    {
+        $cmd = $this->rm_cmd;
+        $this->_executeCommand($cmd, $status, $output, $errors);
+        $this->assertEquals(0, $status);
 
-use Test::More tests => 11;
+        $report = Noid::dbcreate('.', 'jak', $template, 'short');
+        $errmsg = Noid::errmsg(null, 1);
+        if ($return == 'stdout' || $return == 'stderr') {
+            $this->assertEmpty($report, 'should output an error: ' . $errmsg);
+            return $errmsg;
+        }
 
-#BEGIN { use_ok('Noid') };
+        $this->assertNotEmpty($report, $errmsg);
 
-#########################
+        Noid::dbclose($this->noid_dir . 'noid.bdb');
 
-# Insert your test code below, the Test::More module is use()ed here so read
-# its man page ( perldoc Test::More ) for help writing this test script.
+        // Return the erc.
+        $isReadable = is_readable($this->noid_dir . 'README');
+        $error = error_get_last();
+        $this->assertTrue($isReadable, "can't open README: " . $error['message']);
 
-{	# Size tests
+        $erc = file_get_contents($this->noid_dir . 'README');
+        return $erc;
+        #return `./noid dbcreate $template short 2>&1`;
+    }
 
-like short(".sd"), qr/Size:\s*10\n/, 'single digit sequential template';
+    /**
+     * Size tests
+     */
+    public function testSize()
+    {
+        $result = $this->_short('.sd');
+        $regex = '/Size:\s*10\n/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo 'single digit sequential template';
 
-like short(".sdd"), qr/Size:\s*100\n/, '2-digit sequential template';
+        $result = $this->_short('.sdd');
+        $regex = '/Size:\s*100\n/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo '2-digit sequential template';
 
-like short(".zded"), qr/Size:\s*unlimited\n/, '3-digit unbounded sequential';
+        $result = $this->_short('.zded');
+        $regex = '/Size:\s*unlimited\n/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo '3-digit unbounded sequential';
 
-like short("fr.reedde"), qr/Size:\s*2438900\n/, '6-digit random template';
+        $result = $this->_short('fr.reedde');
+        $regex = '/Size:\s*2438900\n/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo '6-digit random template';
+    }
 
-}
+    /**
+     * Some template error tests
+     */
+    public function testTemplateError()
+    {
+        $result = $this->_short('ab.rddd');
+        $regex = '/Size:\s*1000\n/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo 'prefix vowels ok in general';
 
-{	# Some template error tests
+        $result = $this->_short('ab.rdxdk', 'stdout');
+        $regex = '/parse_template: a mask may contain only the letters/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo 'bad mask char';
 
-like short("ab.rddd"), qr/Size:\s*1000\n/, 'prefix vowels ok in general';
+        $result = $this->_short('ab.rdddk', 'stdout');
+        $regex = '/a mask may contain only characters from/';
+        $this->assertNotEmpty(preg_match($regex, $result));
+        # echo 'prefix vowels not ok with check char';
+    }
 
-like short("ab.rdxdk"), qr/parse_template: a mask may contain only the letters/,
-	'bad mask char';
+    /**
+     * Set up a generator that we will test
+     */
+    public function testGenerator()
+    {
+        $erc = $this->_short('8r9.sdd');
+        $regex = '/Size:\s*100\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '2-digit sequential';
 
-like short("ab.rdddk"), qr/a mask may contain only characters from/,
-	'prefix vowels not ok with check char';
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
 
-}
+        $n = 1;
+        while ($n--) {
+            $id = Noid::mint($noid, $contact, '');
+        };
+        $this->assertEquals('8r900', $id);
+        # echo 'sequential mint test first';
 
-{	# Set up a generator that we will test
+        $n = 99;
+        while ($n--) {
+            $id = Noid::mint($noid, $contact, '');
+        };
+        $this->assertEquals('8r999', $id);
+        # echo 'sequential mint test last';
 
-like short("8r9.sdd"), qr/Size:\s*100\n/, '2-digit sequential';
-my $noid = Noid::dbopen("NOID/noid.bdb", 0);
-my $contact = "Fester Bestertester";
-my $id;
+        $n = 1;
+        while ($n--) {
+            $id = Noid::mint($noid, $contact, '');
+        };
+        $this->assertEquals('8r900', $id);
+        # echo 'sequential mint test wrap to first';
 
-my $n = 1;
-$id = Noid::mint($noid, $contact, "")		while ($n--);
-is $id, "8r900", 'sequential mint test first';
+        Noid::dbclose($noid);
+    }
 
-$n = 99;
-$id = Noid::mint($noid, $contact, "")		while ($n--);
-is $id, "8r999", 'sequential mint test last';
-
-$n = 1;
-$id = Noid::mint($noid, $contact, "")		while ($n--);
-is $id, "8r900", 'sequential mint test wrap to first';
-
-Noid::dbclose($noid);
+    protected function _executeCommand($cmd, &$status, &$output, &$errors)
+    {
+        // Using proc_open() instead of exec() avoids an issue: current working
+        // directory cannot be set properly via exec().  Note that exec() works
+        // fine when executing in the web environment but fails in CLI.
+        $descriptorSpec = array(
+            0 => array('pipe', 'r'), //STDIN
+            1 => array('pipe', 'w'), //STDOUT
+            2 => array('pipe', 'w'), //STDERR
+        );
+        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
+            $output = stream_get_contents($pipes[1]);
+            $errors = stream_get_contents($pipes[2]);
+            foreach ($pipes as $pipe) {
+                fclose($pipe);
+            }
+            $status = proc_close($proc);
+        } else {
+            throw new Exception("Failed to execute command: $cmd.");
+        }
+    }
 }

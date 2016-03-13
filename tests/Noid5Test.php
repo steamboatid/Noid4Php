@@ -1,73 +1,128 @@
-# ------------------------------------
-#
-# Project:	Noid
-#
-# Name:		noid5.t
-#
-# Function:	To test the noid command.
-#
-# What Is Tested:
-#		Create minter with template de, for 290 identifiers.
-#		Try to bind to the 3rd identifier that would be minted,
-#			and check that it failed.
-#
-# Command line parameters:  none.
-#
-# Author:	Michael A. Russell
-#
-# Revision History:
-#		7/19/2004 - MAR - Initial writing
-#
-# ------------------------------------
+<?php
+/**
+ * @author Michael A. Russell
+ * @author Daniel Berthereau (conversion to Php)
+ * @package Noid
+ */
 
-use Test::More tests => 8;
+/**
+ * Tests for Noid (5).
+ *
+ * ------------------------------------
+ *
+ * Project: Noid
+ *
+ * Name:        noid5.t
+ *
+ * Function:    To test the noid command.
+ *
+ * What Is Tested:
+ *      Create minter with template de, for 290 identifiers.
+ *      Try to bind to the 3rd identifier that would be minted,
+ *          and check that it failed.
+ *
+ * Command line parameters:  none.
+ *
+ * Author:  Michael A. Russell
+ *
+ * Revision History:
+ *      7/19/2004 - MAR - Initial writing
+ *
+ * ------------------------------------
+ */
+class Noid5Test extends PHPUnit_Framework_TestCase
+{
+    public $dir;
+    public $rm_cmd;
+    public $noid_cmd;
+    public $noid_dir;
 
-my $this_dir = ".";
-my $rm_cmd = "/bin/rm -rf $this_dir/NOID > /dev/null 2>&1 ";
-my $noid_bin = "blib/script/noid";
-my $noid_cmd = (-x $noid_bin ? $noid_bin : "../$noid_bin") . " -f $this_dir ";
+    public function setUp()
+    {
+        $this->dir = getcwd();
+        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
+        $noid_bin = 'blib/script/noid';
+        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
+        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
+        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
 
-# Start off by doing a dbcreate.
-# First, though, make sure that the BerkeleyDB files do not exist.
-system("$rm_cmd ; " .
-	"$noid_cmd dbcreate tst5.rde long 13030 cdlib.org noidTest >/dev/null");
+        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
+    }
 
-# Check that the "NOID" subdirectory was created.
-$this_test = -e "$this_dir/NOID";
-$next_test = -d _;
-ok($this_test, "NOID was created");
+    public function tearDown()
+    {
+        $dbname = $this->noid_dir . 'noid.bdb';
+        if (file_exists($dbname)) {
+            Noid::dbclose($dbname);
+        }
+    }
 
-unless ($this_test) {
-	die "no minter directory created, stopped";
+    public function testNoid5()
+    {
+        # Start off by doing a dbcreate.
+        # First, though, make sure that the BerkeleyDB files do not exist.
+        $cmd = "{$this->rm_cmd} ; " .
+            "{$this->noid_cmd} dbcreate tst5.rde long 13030 cdlib.org noidTest >/dev/null";
+        $this->_executeCommand($cmd, $status, $output, $errors);
+        $this->assertEquals(0, $status);
+
+        # Check that the "NOID" subdirectory was created.
+        $this->assertFileExists($this->noid_dir, 'no minter directory created, stopped');
+        # echo 'NOID was created';
+
+        # That "NOID" is a directory.
+        $this->assertTrue(is_dir($this->noid_dir), 'NOID is not a directory, stopped');
+        # echo 'NOID is a directory';
+
+        # Check for the presence of the "README" file, then "log" file, then the
+        # "logbdb" file within "NOID".
+        $this->assertFileExists($this->noid_dir . 'README');
+        # echo 'NOID/README was created';
+        $this->assertFileExists($this->noid_dir . 'log');
+        # echo 'NOID/log was created';
+        $this->assertFileExists($this->noid_dir . 'logbdb');
+        # echo 'NOID/logbdb was created';
+
+        # Check for the presence of the BerkeleyDB file within "NOID".
+        $this->assertFileExists($this->noid_dir . 'noid.bdb', 'minter initialization failed, stopped');
+        # echo 'NOID/noid.bdb was created';
+
+        # Try binding the 3rd identifier to be minted.
+        $cmd = "{$this->noid_cmd} bind set 13030/tst594 element value 2>&1";
+        $this->_executeCommand($cmd, $status, $output, $errors);
+        $this->assertEquals(0, $status);
+
+        $noid_output = explode(PHP_EOL, $output);
+        $noid_output = array_map('trim', $noid_output);
+        $noid_output = array_filter($noid_output, 'strlen');
+        $this->assertGreaterThanOrEqual(1, count($noid_output));
+        # echo 'at least one line of output from attempt to bind to an unminted id';
+
+        $msg = 'error: 13030/tst594: "long" term disallows binding ' .
+            'an unissued identifier unless a hold is first placed on it.';
+        $this->assertEquals($msg, $noid_output[0]);
+        # echo 'disallowed binding to unminted id';
+    }
+
+    protected function _executeCommand($cmd, &$status, &$output, &$errors)
+    {
+        // Using proc_open() instead of exec() avoids an issue: current working
+        // directory cannot be set properly via exec().  Note that exec() works
+        // fine when executing in the web environment but fails in CLI.
+        $descriptorSpec = array(
+            0 => array('pipe', 'r'), //STDIN
+            1 => array('pipe', 'w'), //STDOUT
+            2 => array('pipe', 'w'), //STDERR
+        );
+        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
+            $output = stream_get_contents($pipes[1]);
+            $errors = stream_get_contents($pipes[2]);
+            foreach ($pipes as $pipe) {
+                fclose($pipe);
+            }
+            $status = proc_close($proc);
+        } else {
+            throw new Exception("Failed to execute command: $cmd.");
+        }
+    }
 }
-
-# That "NOID" is a directory.
-ok($next_test, "NOID is a directory");
-
-unless ($next_test) {
-	die "NOID is not a directory, stopped";
-}
-
-# Check for the presence of the "README" file, then "log" file, then the
-# "logbdb" file within "NOID".
-ok(-e "$this_dir/NOID/README", "NOID/README was created");
-ok(-e "$this_dir/NOID/log", "NOID/log was created");
-ok(-e "$this_dir/NOID/logbdb", "NOID/logbdb was created");
-
-# Check for the presence of the BerkeleyDB file within "NOID".
-$this_test = -e "$this_dir/NOID/noid.bdb";
-ok($this_test, "NOID/noid.bdb was created");
-
-unless ($this_test) {
-	die "minter initialization failed, stopped";
-}
-
-# Try binding the 3rd identifier to be minted.
-@noid_output = `$noid_cmd bind set 13030/tst594 element value 2>&1`;
-ok(scalar(@noid_output) >= 1,
-	"at least one line of output from attempt to bind to an unminted id");
-chomp($noid_output[0]);
-
-is($noid_output[0], "error: 13030/tst594: \"long\" term disallows binding " .
-	"an unissued identifier unless a hold is first placed on it.",
-	"disallowed binding to unminted id");

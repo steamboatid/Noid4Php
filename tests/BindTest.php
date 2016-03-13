@@ -1,106 +1,202 @@
-#########################
+<?php
+/**
+ * @author Michael A. Russell
+ * @author Daniel Berthereau (conversion to Php)
+ * @package Noid
+ */
 
-# change 'tests => 1' to 'tests => last_test_to_print';
+/**
+ * Tests for Noid (Bind).
+ */
+class NoidBindTest extends PHPUnit_Framework_TestCase
+{
+    public $dir;
+    public $rm_cmd;
+    public $noid_cmd;
+    public $noid_dir;
 
-use Noid;
+    public function setUp()
+    {
+        $this->dir = getcwd();
+        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
+        $noid_bin = 'blib/script/noid';
+        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
+        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
+        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
 
-$ENV{'SHELL'} = "/bin/sh";
-my ($report, $erc);
+        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
+    }
 
-sub short { my( $template )=@_;
-	system("/bin/rm -rf ./NOID > /dev/null 2>&1 ");
-	$report = Noid::dbcreate(".", "jak", $template, "short");
-	! defined($report) and
-		return(Noid::errmsg());
-	open(IN, "<NOID/README") or
-		die("can't open README: $!");
-	local $/;
-	$erc = <IN>;
-	close(IN);
-	return($erc);
-	#return `./noid dbcreate $template short 2>&1`;
-}
+    public function tearDown()
+    {
+        $dbname = $this->noid_dir . 'noid.bdb';
+        if (file_exists($dbname)) {
+            Noid::dbclose($dbname);
+        }
+    }
 
-use Test::More tests => 17;
+    protected function _short($template, $return = 'erc')
+    {
+        $cmd = $this->rm_cmd;
+        $this->_executeCommand($cmd, $status, $output, $errors);
+        $this->assertEquals(0, $status);
 
-#BEGIN { use_ok('Noid') };
+        $report = Noid::dbcreate('.', 'jak', $template, 'short');
+        $errmsg = Noid::errmsg(null, 1);
+        if ($return == 'stdout' || $return == 'stderr') {
+            $this->assertEmpty($report, 'should output an error: ' . $errmsg);
+            return $errmsg;
+        }
 
-#########################
+        $this->assertNotEmpty($report, $errmsg);
 
-{	# Bind tests -- short
+        Noid::dbclose($this->noid_dir . 'noid.bdb');
 
-like short(".sdd"), qr/Size:\s*100\n/, '2-digit sequential';
-my $noid = Noid::dbopen("NOID/noid.bdb", 0);
-my $contact = "Fester Bestertester";
-my $id;
+        // Return the erc.
+        $isReadable = is_readable($this->noid_dir . 'README');
+        $error = error_get_last();
+        $this->assertTrue($isReadable, "can't open README: " . $error['message']);
 
-$id = Noid::mint($noid, $contact, "");
-$id = Noid::mint($noid, $contact, "");
-is $id, "01", 'sequential mint verify';
+        $erc = file_get_contents($this->noid_dir . 'README');
+        return $erc;
+        #return `./noid dbcreate $template short 2>&1`;
+    }
 
-like Noid::bind($noid, $contact, 1, "set", $id, "myelem", "myvalue"),
-	qr/Status:  ok, 7/, 'simple bind';
+    /**
+     * Bind tests -- short
+     */
+    public function testBind()
+    {
+        $erc = $this->_short('.sdd');
+        $regex = '/Size:\s*100\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '2-digit sequential';
 
-like Noid::fetch($noid, 1, $id, "myelem"),
-	qr/myelem: myvalue/, 'simple fetch';
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
 
-like Noid::fetch($noid, 0, $id, "myelem"),
-	qr/^myvalue$/, 'simple non-verbose (get) fetch';
+        $id = Noid::mint($noid, $contact, '');
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('01', $id);
+        # echo 'sequential mint verify';
 
-Noid::dbclose($noid);
-}
+        $result = Noid::bind($noid, $contact, 1, 'set', $id, 'myelem', 'myvalue');
+        $this->assertNotEmpty(preg_match('/Status:  ok, 7/', $result));
+        # echo 'simple bind';
 
-{	# Queue/hold tests -- short
+        $result = Noid::fetch($noid, 1, $id, 'myelem');
+        $this->assertNotEmpty(preg_match('/myelem: myvalue/', $result));
+        # echo 'simple fetch';
 
-like short(".sdd"), qr/Size:\s*100\n/, '2-digit sequential';
-my $noid = Noid::dbopen("NOID/noid.bdb", 0);
-my $contact = "Fester Bestertester";
-my ($id, $status);
+        $result = Noid::fetch($noid, 0, $id, 'myelem');
+        $this->assertNotEmpty(preg_match('/^myvalue$/', $result));
+        # echo 'simple non-verbose (get) fetch';
 
-$id = Noid::mint($noid, $contact, "");
-is $id, "00", 'mint first';
+        Noid::dbclose($noid);
+    }
 
-is Noid::hold($noid, $contact, "set", "01"), 1, 'hold next';
+    /**
+     * Queue/hold tests -- short
+     */
+    public function testQueueHold()
+    {
+        $erc = $this->_short('.sdd');
+        $regex = '/Size:\s*100\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '2-digit sequential';
 
-$id = Noid::mint($noid, $contact, "");
-is $id, "02", 'mint next skips id held';
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
 
-# Shouldn't have to release hold to queue it
-like((Noid::queue($noid, $contact, "now", $id))[0],
-	qr/id: $id/, 'queue previously held');
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('00', $id);
+        # echo 'mint first';
 
-$id = Noid::mint($noid, $contact, "");
-is $id, "02", 'mint next gets from queue';
+        $result = Noid::hold($noid, $contact, 'set', '01');
+        $this->assertEquals(1, $result);
+        # echo 'hold next';
 
-$id = Noid::mint($noid, $contact, "");
-is $id, "03", 'mint next back to normal';
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('02', $id);
+        # echo 'mint next skips id held';
 
-Noid::dbclose($noid);
-}
+        # Shouldn't have to release hold to queue it
+        $result = Noid::queue($noid, $contact, 'now', $id);
+        $regex = "/id: " . preg_quote($id, '/') . '/';
+        $this->assertNotEmpty(preg_match($regex, $result[0]));
+        # echo 'queue previously held';
 
-# XXX
-# To do: set up a "long" minter and test the various things that
-# it should reject, eg, queue a minted Id without first doing a
-# "hold release Id"
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('02', $id);
+        # echo 'mint next gets from queue';
 
-{	# Validate tests -- short
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('03', $id);
+        # echo 'mint next back to normal';
 
-like short("fk.redek"), qr/Size:\s*8410\n/, '4-digit random';
-my $noid = Noid::dbopen("NOID/noid.bdb", 0);
-my $contact = "Fester Bestertester";
-my ($id, $status);
+        Noid::dbclose($noid);
+    }
 
-$id = Noid::mint($noid, $contact, "");
-is $id, "fk491f", 'mint one';
+    # XXX
+    # To do: set up a "long" minter and test the various things that
+    # it should reject, eg, queue a minted Id without first doing a
+    # "hold release Id"
 
-is grep(/error: /, Noid::validate($noid, "-", "fk491f")),
-	0, 'validate just minted';
+    /**
+     * Validate tests -- short
+     */
+    public function testValidate()
+    {
+        $erc = $this->_short('fk.redek');
+        $regex = '/Size:\s*8410\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '4-digit random';
 
-is grep(/iderr: /, Noid::validate($noid, "-", "fk492f")),
-	1, 'detect one digit off';
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
 
-is grep(/iderr: /, Noid::validate($noid, "-", "fk419f")),
-	1, 'detect transposition';
+        $id = Noid::mint($noid, $contact, '');
+        # In Perl script first is "fk491f".
+        $this->assertEquals('fkt31p', $id);
+        # echo 'mint first';
 
-Noid::dbclose($noid);
+        $result = Noid::validate($noid, '-', 'fkt31p');
+        $regex = '/error: /';
+        $this->assertEquals(0, preg_match($regex, $result[0]));
+        # echo 'validate just minted';
+
+        $result = Noid::validate($noid, '-', 'fkt32p');
+        $regex = '/iderr: /';
+        $this->assertEquals(1, preg_match($regex, $result[0]));
+        # echo 'detect one digit off';
+
+        $result = Noid::validate($noid, '-', 'fkt13p');
+        $regex = '/iderr: /';
+        $this->assertEquals(1, preg_match($regex, $result[0]));
+        # echo 'detect transposition';
+
+        Noid::dbclose($noid);
+    }
+
+    protected function _executeCommand($cmd, &$status, &$output, &$errors)
+    {
+        // Using proc_open() instead of exec() avoids an issue: current working
+        // directory cannot be set properly via exec().  Note that exec() works
+        // fine when executing in the web environment but fails in CLI.
+        $descriptorSpec = array(
+            0 => array('pipe', 'r'), //STDIN
+            1 => array('pipe', 'w'), //STDOUT
+            2 => array('pipe', 'w'), //STDERR
+        );
+        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
+            $output = stream_get_contents($pipes[1]);
+            $errors = stream_get_contents($pipes[2]);
+            foreach ($pipes as $pipe) {
+                fclose($pipe);
+            }
+            $status = proc_close($proc);
+        } else {
+            throw new Exception("Failed to execute command: $cmd.");
+        }
+    }
 }
