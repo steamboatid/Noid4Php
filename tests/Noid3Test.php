@@ -99,8 +99,7 @@ class Noid3Test extends PHPUnit_Framework_TestCase
 
         # Verify that it's the third one.
         $noid_output = trim($output);
-        # Is 'id: 13030/tst394' for the Perl script.
-        $this->assertEquals('id: 13030/tst38d', $noid_output);
+        $this->assertEquals('id: 13030/tst394', $noid_output);
         # echo 'held two, minted one, got the third one';
     }
 

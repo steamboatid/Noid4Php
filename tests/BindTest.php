@@ -156,21 +156,20 @@ class NoidBindTest extends PHPUnit_Framework_TestCase
         $contact = 'Fester Bestertester';
 
         $id = Noid::mint($noid, $contact, '');
-        # In Perl script first is "fk491f".
-        $this->assertEquals('fkt31p', $id);
+        $this->assertEquals('fk491f', $id);
         # echo 'mint first';
 
-        $result = Noid::validate($noid, '-', 'fkt31p');
+        $result = Noid::validate($noid, '-', 'fk491f');
         $regex = '/error: /';
         $this->assertEquals(0, preg_match($regex, $result[0]));
         # echo 'validate just minted';
 
-        $result = Noid::validate($noid, '-', 'fkt32p');
+        $result = Noid::validate($noid, '-', 'fk492f');
         $regex = '/iderr: /';
         $this->assertEquals(1, preg_match($regex, $result[0]));
         # echo 'detect one digit off';
 
-        $result = Noid::validate($noid, '-', 'fkt13p');
+        $result = Noid::validate($noid, '-', 'fk419f');
         $regex = '/iderr: /';
         $this->assertEquals(1, preg_match($regex, $result[0]));
         # echo 'detect transposition';

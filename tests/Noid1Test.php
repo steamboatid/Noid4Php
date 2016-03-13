@@ -130,10 +130,8 @@ class Noid1Test extends PHPUnit_Framework_TestCase
         # echo "white space follows output of mint command for next to last noid");
         # This was the next to the last one on 7/16/2004.
         #is($noid, "13030/tst11q", "next to last noid was \"13030/tst11q\"");
-        # This is the next to the last one for the Perl script.
-        #is($noid, "13030/tst190", "next to last noid was \"13030/tst190\"");
-        $this->assertEquals('13030/tst18h', $noid);
-        # echo 'next to last noid was "13030/tst18h"';
+        $this->assertEquals('13030/tst190', $noid);
+        # echo 'next to last noid was "13030/tst190"';
 
         # Try to queue one of the 3.  It shouldn't let me, because the hold must
         # be released first.
@@ -198,10 +196,8 @@ class Noid1Test extends PHPUnit_Framework_TestCase
         # echo "white space follows output of mint command for next to last noid");
         # This was the the last one on 7/16/2004.
         #is($noid, "13030/tst10f", "last noid was \"13030/tst10f\"");
-        # This was the the last one for the Perl script.
-        #is($noid, "13030/tst17p", "last noid was \"13030/tst17p\"");
-        $this->assertEquals('13030/tst135', $noid);
-        # echo 'last noid was "13030/tst135"';
+        $this->assertEquals('13030/tst17p', $noid);
+        # echo 'last noid was "13030/tst17p"';
 
         # Try to mint another, after they are exhausted.
         $cmd = "{$this->noid_cmd} mint 1 2>&1";

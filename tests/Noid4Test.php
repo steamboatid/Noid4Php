@@ -119,45 +119,26 @@ class Noid4Test extends PHPUnit_Framework_TestCase
             'wrong number of ids minted, stopped');
         # echo 'number of minted noids';
 
-        // In the Perl script, order is different because of rand(), excepted
-        // when the ids are held before.
         $this->assertEquals('id: 13030/tst43m', $noid_output[0], 'Error in 1st minted noid');
         $this->assertEquals('id: 13030/tst47h', $noid_output[1], 'Error in 2nd minted noid');
         $this->assertEquals('id: 13030/tst44k', $noid_output[2], 'Error in 3rd minted noid');
-        // $this->assertEquals('id: 13030/tst48t', $noid_output[3], 'Error in 4th minted noid');
-        $this->assertEquals('id: 13030/tst45p', $noid_output[3], 'Error in 4th minted noid');
-        // $this->assertEquals('id: 13030/tst466', $noid_output[4], 'Error in 5th minted noid');
-        $this->assertEquals('id: 13030/tst499', $noid_output[4], 'Error in 5th minted noid');
-        // $this->assertEquals('id: 13030/tst44x', $noid_output[5], 'Error in 6th minted noid');
-        $this->assertEquals('id: 13030/tst47t', $noid_output[5], 'Error in 6th minted noid');
-        // $this->assertEquals('id: 13030/tst42c', $noid_output[6], 'Error in 7th minted noid');
-        $this->assertEquals('id: 13030/tst469', $noid_output[6], 'Error in 7th minted noid');
-        // $this->assertEquals('id: 13030/tst49s', $noid_output[7], 'Error in 8th minted noid');
-        $this->assertEquals('id: 13030/tst400', $noid_output[7], 'Error in 8th minted noid');
-        // $this->assertEquals('id: 13030/tst48f', $noid_output[8], 'Error in 9th minted noid');
-        $this->assertEquals('id: 13030/tst43g', $noid_output[8], 'Error in 9th minted noid');
-        // $this->assertEquals('id: 13030/tst475', $noid_output[9], 'Error in 10th minted noid');
-        $this->assertEquals('id: 13030/tst424', $noid_output[9], 'Error in 10th minted noid');
-        // $this->assertEquals('id: 13030/tst45v', $noid_output[10], 'Error in 11th minted noid');
-        $this->assertEquals('id: 13030/tst45q', $noid_output[10], 'Error in 11th minted noid');
-        // $this->assertEquals('id: 13030/tst439', $noid_output[11], 'Error in 12th minted noid');
-        $this->assertEquals('id: 13030/tst498', $noid_output[11], 'Error in 12th minted noid');
-        // $this->assertEquals('id: 13030/tst40q', $noid_output[12], 'Error in 13th minted noid');
-        $this->assertEquals('id: 13030/tst42v', $noid_output[12], 'Error in 13th minted noid');
-        // $this->assertEquals('id: 13030/tst49f', $noid_output[13], 'Error in 14th minted noid');
-        $this->assertEquals('id: 13030/tst41f', $noid_output[13], 'Error in 14th minted noid');
-        // $this->assertEquals('id: 13030/tst484', $noid_output[14], 'Error in 15th minted noid');
-        $this->assertEquals('id: 13030/tst451', $noid_output[14], 'Error in 15th minted noid');
-        // $this->assertEquals('id: 13030/tst46t', $noid_output[15], 'Error in 16th minted noid');
-        $this->assertEquals('id: 13030/tst48m', $noid_output[15], 'Error in 16th minted noid');
-        // $this->assertEquals('id: 13030/tst45h', $noid_output[16], 'Error in 17th minted noid');
-        $this->assertEquals('id: 13030/tst477', $noid_output[16], 'Error in 17th minted noid');
-        // $this->assertEquals('id: 13030/tst447', $noid_output[17], 'Error in 18th minted noid');
-        $this->assertEquals('id: 13030/tst40t', $noid_output[17], 'Error in 18th minted noid');
-        // $this->assertEquals('id: 13030/tst42z', $noid_output[18], 'Error in 19th minted noid');
-        $this->assertEquals('id: 13030/tst49d', $noid_output[18], 'Error in 19th minted noid');
-        // $this->assertEquals('id: 13030/tst41n', $noid_output[19], 'Error in 20th minted noid');
-        $this->assertEquals('id: 13030/tst47w', $noid_output[19], 'Error in 20th minted noid');
+        $this->assertEquals('id: 13030/tst48t', $noid_output[3], 'Error in 4th minted noid');
+        $this->assertEquals('id: 13030/tst466', $noid_output[4], 'Error in 5th minted noid');
+        $this->assertEquals('id: 13030/tst44x', $noid_output[5], 'Error in 6th minted noid');
+        $this->assertEquals('id: 13030/tst42c', $noid_output[6], 'Error in 7th minted noid');
+        $this->assertEquals('id: 13030/tst49s', $noid_output[7], 'Error in 8th minted noid');
+        $this->assertEquals('id: 13030/tst48f', $noid_output[8], 'Error in 9th minted noid');
+        $this->assertEquals('id: 13030/tst475', $noid_output[9], 'Error in 10th minted noid');
+        $this->assertEquals('id: 13030/tst45v', $noid_output[10], 'Error in 11th minted noid');
+        $this->assertEquals('id: 13030/tst439', $noid_output[11], 'Error in 12th minted noid');
+        $this->assertEquals('id: 13030/tst40q', $noid_output[12], 'Error in 13th minted noid');
+        $this->assertEquals('id: 13030/tst49f', $noid_output[13], 'Error in 14th minted noid');
+        $this->assertEquals('id: 13030/tst484', $noid_output[14], 'Error in 15th minted noid');
+        $this->assertEquals('id: 13030/tst46t', $noid_output[15], 'Error in 16th minted noid');
+        $this->assertEquals('id: 13030/tst45h', $noid_output[16], 'Error in 17th minted noid');
+        $this->assertEquals('id: 13030/tst447', $noid_output[17], 'Error in 18th minted noid');
+        $this->assertEquals('id: 13030/tst42z', $noid_output[18], 'Error in 19th minted noid');
+        $this->assertEquals('id: 13030/tst41n', $noid_output[19], 'Error in 20th minted noid');
     }
 
     protected function _executeCommand($cmd, &$status, &$output, &$errors)
