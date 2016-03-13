@@ -364,7 +364,7 @@ class NoidDo
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    public function bind($how, $id, $elem = '', $value)
+    public function bind($how, $id, $elem = '', $value = null)
     {
         global $stderr;
 
@@ -379,7 +379,7 @@ class NoidDo
             $elem = '';
         }
         if ($elem == ':') {    # expect name/value pairs up to blank line
-            if (defined($value)) {
+            if (strlen($value)) {
                 fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
                     $value, $elem) . PHP_EOL);
                 Noid::dbclose($noid);
@@ -397,17 +397,18 @@ class NoidDo
             $bound = 0;
             $total = 0;
             while (1) {
-                ($elem, $value) = (shift @elemvals, shift @elemvals);
-                if (! defined($elem) && ! defined($value)) {
+                $elem = array_shift($elemvals);
+                $value = array_shift($elemvals);
+                if ($elem === false && $value === false) {
                     break;
                 }
                 $total++;
-                if (! defined($elem)) {
+                if ($elem === false) {
                     Noid::addmsg($noid,
                         sprintf('error: %s: bad element associated with value "%s".', $id, $value));
                     break;
                 }
-                if (! defined($value)) {
+                if ($value === false) {
                     $value = '';
                 }
                 else {
@@ -430,7 +431,7 @@ class NoidDo
             return is_null($report) ? 1 : 0;
         }
         elseif ($elem == ':-') {        # expect name/value to be rest of file
-            if (defined($value)) {
+            if (strlen($value)) {
                 fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
                     $value, $elem) . PHP_EOL);
                 Noid::dbclose($noid);
@@ -513,7 +514,7 @@ class NoidDo
             return 0;
         }
         $report = Noid::bind($noid, $contact, $validate, $how, $id, $elem, $value);
-        if (! defined($report)) {
+        if (empty($report)) {
             fwrite($stderr, Noid::errmsg($noid));
             $this->usage(0, 1, 'bind');
         }
@@ -522,7 +523,7 @@ class NoidDo
         }
         # yyy make sure return(0)'s do dbclose...
         Noid::dbclose($noid);
-        return(defined($report) ? 1 : 0);
+        return empty($report) ? 1 : 0;
     }
 
     /**
@@ -742,11 +743,11 @@ class NoidDo
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    public function note($key, $value)
+    public function note($key = '', $value = '')
     {
         global $stderr;
 
-        if (! defined($key) || ! defined($value)) {
+        if (empty($key) || empty($value)) {
             fwrite($stderr,
                 'You must supply a key and a value.' . PHP_EOL);
             $this->usage(1, 1, 'note');
