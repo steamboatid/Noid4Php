@@ -1,78 +1,71 @@
-#!/usr/bin/perl -Tw -Ilib -I../lib
-#
-# noid - a Perl script that mints and binds nice opaque identifiers
-#   using the Noid.pm module.  This script can be invoked additionally
-#   via a URL interface as "noidu...", which formats output for the web.
-#
-# Author:  John A. Kunze, jak@ucop.edu, California Digital Library
-#    Orginally created Nov. 2002 at UCSF Center for Knowledge Management
-# 
-# ---------
-# Copyright (c) 2002-2006 UC Regents
-# 
-# Permission to use, copy, modify, distribute, and sell this software and
-# its documentation for any purpose is hereby granted without fee, provided
-# that (i) the above copyright notices and this permission notice appear in
-# all copies of the software and related documentation, and (ii) the names
-# of the UC Regents and the University of California are not used in any
-# advertising or publicity relating to the software without the specific,
-# prior written permission of the University of California.
-# 
-# THE SOFTWARE IS PROVIDED "AS-IS" AND WITHOUT WARRANTY OF ANY KIND, 
-# EXPRESS, IMPLIED OR OTHERWISE, INCLUDING WITHOUT LIMITATION, ANY 
-# WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.  
-# 
-# IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE FOR ANY
-# SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY KIND,
-# OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
-# WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY
-# THEORY OF LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE
-# OR PERFORMANCE OF THIS SOFTWARE.
-# ---------
+#!/usr/bin/php
+<?php
+/**
+ * noid - a php script that mints and binds nice opaque identifiers
+ *   using the Noid.php class.  This script can be invoked additionally
+ *   via a URL interface as "noidu...", which formats output for the web.
+ *
+ * Author:  John A. Kunze, jak@ucop.edu, California Digital Library
+ *    Orginally created Nov. 2002 at UCSF Center for Knowledge Management
+ * Ported to PHP by Daniel Berthereau for Mines ParisTech
+ *
+ * ---------
+ * Copyright (c) 2002-2006 UC Regents
+ * Copyright (c) 2016 Daniel Berthereau
+ *
+ * Permission to use, copy, modify, distribute, and sell this software and
+ * its documentation for any purpose is hereby granted without fee, provided
+ * that (i) the above copyright notices and this permission notice appear in
+ * all copies of the software and related documentation, and (ii) the names
+ * of the UC Regents and the University of California are not used in any
+ * advertising or publicity relating to the software without the specific,
+ * prior written permission of the University of California.
+ *
+ * THE SOFTWARE IS PROVIDED "AS-IS" AND WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS, IMPLIED OR OTHERWISE, INCLUDING WITHOUT LIMITATION, ANY
+ * WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE FOR ANY
+ * SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY KIND,
+ * OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+ * WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY
+ * THEORY OF LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE
+ * OR PERFORMANCE OF THIS SOFTWARE.
+ * ---------
+ *
+ * XXX change 'NOID' as database name to 'dbnoid' (for case insensitive filesys)
+ * XXX fix To Do alphabets
+ * XXX document an example of how to set up a rewrite rule that responds
+ *     to the ? and ?? at the end of an id, and convert to a CGI string
+ * XXX add java interface
+ * XXX fix env test to suggest that NFS and AFS filesystems not be used
+ * XXX why does dbopen fail when doing dbinfo from an account that can't
+ *     write the file -- should be doing readonly open
+ * XXX record literal noid dbcreate (re)creation command used into README
+ */
 
-# XXX change 'NOID' as database name to 'dbnoid' (for case insensitive filesys)
-# XXX fix To Do alphabets
-# XXX document an example of how to set up a rewrite rule that responds
-#     to the ? and ?? at the end of an id, and convert to a CGI string
-# XXX add java interface
-# XXX fix env test to suggest that NFS and AFS filesystems not be used
-# XXX why does dbopen fail when doing dbinfo from an account that can't
-#     write the file -- should be doing readonly open
-# XXX record literal noid dbcreate (re)creation command used into README
+require_once 'lib/Noid.php';
 
-use strict;
+$web = 0;
 
-#sub get_untainted_PERL5LIB {
-#	my $key;
-#	my $perl_5_lib = $ENV{"PERL5LIB"};
-#	#my @lib_list = ('./Noid/lib');
-#	my @lib_list = ('./lib');
-#	! defined($perl_5_lib) and
-#		return(@lib_list);
-#	if ($perl_5_lib =~ /^(\/\S+)$/) {
-#		push @lib_list, $1;
-#		return(@lib_list);
-#	}
-#	die(qq@Format of variable "PERL5LIB" ($perl_5_lib) invalid.\n@);
-#}
-#
-#use lib	get_untainted_PERL5LIB( );
+$dbdir = null;
+$dbname = null;
+$debug = null;
+$locktest = null;
+$ver = null;
+$help = null;
+$contact = null;
+$bulkcmd = null;
 
-use Config;     # Now do Brian McCauley's perl5lib.pm trick for untainting.
-use lib map { /(.*)/ } split /$Config{path_sep}/ => $ENV{PERL5LIB};
+$template = null;
+$snaa = null;
+$total = null;
 
-use Text::ParseWords;
-use Getopt::Long;
-use BerkeleyDB;
-use Noid;
-
-my $web = 0;
-my ($dbdir, $dbname, $debug, $locktest, $ver, $help, $contact, $bulkcmd);
-my ($template, $snaa, $total);
-my (@valid_helptopics, %info);		# purposely undefined for now
-my @valid_commands = qw(
-	bind dbinfo dbcreate fetch get hello help hold
-	mint note peppermint queue validate
+$valid_helptopics = array();
+$info = array(); # purposely undefined for now
+$valid_commands = array(
+    'bind', 'dbinfo', 'dbcreate', 'fetch', 'get', 'hello', 'help', 'hold',
+    'mint', 'note', 'peppermint', 'queue', 'validate',
 );
 
 # yyy make a noidmail (email robot interface?)
@@ -91,632 +84,747 @@ my @valid_commands = qw(
 #  which are db_put's in disguise, (4) make sure Noid.pm exit block releases
 #  locks, aborts transactions, etc.
 
-# main
+/**
+ * Main.
+ */
+my $line;
+if ($0 =~ m|noidu[^/]*$|) {    # if called with the URL interface
+    $web = 1;            # orient output for HTTP
+    print "Content-Type: text/plain\n\n";
+    open(STDERR, ">&STDOUT")
+        or die("Can't combine stderr and stdout: $!\n");
+    ! defined($ENV{'QUERY_STRING'}) and
+        die("No QUERY_STRING (hence no command) defined.\n");
+    ($line = $ENV{'QUERY_STRING'}) =~ tr/+/ /;
+    @ARGV = shellwords($line);
+    #print "ARGV: " . join("|", @ARGV) . "\n";
+}
+if ($0 =~ m|noidr[^/]*$|) {    # if called for RewriteMap resolving,
+                # see Apache Rewrite mod documentation
+    $| = 1;        # very important to unbuffer the output
+    $bulkcmd = 1;
+    # yyy should we set a timeout to prevent hanging the server?
+}
+
+if (! ($contact = who_are_you($web))) {
+    print STDERR "Can't tell who you are: $!\n";
+    exit(1);
+}
+
+if (! GetOptions(
+    'debug'        => \$debug,    # flag
+    'locktest=i'    => \$locktest,    # flag
+    'f=s'        => \$dbdir,    # filesystem directory name
+    'version'    => \$ver,    # flag
+    'help'        => \$help,    # flag
+)) {
+    print "error: GetOptions\n";
+    usage(1, 1, "intro");
+    exit(1);
+}
+if ($locktest) {
+    $locktest < 0 and
+        print("error: locktest value must be a positive "
+            . "number of seconds to sleep\n"),
+        exit(0);
+    Noid::locktest($locktest);
+}
+$web && $debug and
+    print "contact=$contact, pwd=", `pwd`;
+
+# Handle -v or -h, and exit early.
+if ($ver) {
+    # We take our version number from the Noid module version.
+    print qq@This is "noid" version $Noid::VERSION.\n@;
+    exit(0);
+}
+if ($help) {
+    # yyy should we encode help output?   print "help:\n";
+    usage(0, 0, "intro");
+    exit(0);
+}
+
+# Now try to find a database directory string.
+# In the special case of dbcreate, we may create
+# and name the directory on behalf of the user.
+#
+if (! defined($dbdir)) {
+    defined($ENV{'NOID'}) and    # is NOID env variable defined?
+        $dbdir = $ENV{'NOID'},
+    1 or
+    $0 =~ m|_([^/]+)$| and        # executable link reveals dbdir?
+        $dbdir = $1,
+    1 or
+        $dbdir = '.',        # else try current directory
+    ;
+    if (! defined($dbdir) || $dbdir !~ /\S/) {
+        print "error: no Dbdir\n";
+        usage(1, 1, "intro");
+        exit(1);
+    }
+}
+elsif ($web) {
+    print qq@-f option not allowed in URL interface.\n@;
+    return(0);
+}
+# Now untaint $dbdir.  yyy we can do better?
+$dbdir =~ m|^(.*)$| and
+    $dbdir = $1
+or
+    print("error: bad Dbdir\n"),
+    usage(1, 1, "intro"),
+    exit(1)
+;
+$dbname = "$dbdir/NOID/noid.bdb";
+
+# Bulk command mode is signified by a single final argument of "-".
+# If we're _not_ in bulk command mode, expect a single command
+# represented by the remaining arguments; do it and exit.
+#
+$bulkcmd ||= ($#ARGV == 0 && $ARGV[0] eq "-");
+if (! $bulkcmd) {
+    do_command(@ARGV);
+    exit(0);
+}
+
+# If we get here, we're in bulk command mode.  Read, tokenize,
+# and execute commands from the standard input.  Test with
+#   curl --data-binary @cmd_file http://dot.ucop.edu/nd/noidu_kt5\?-
+# where cmd_file contains newline-separated commands.
+# XXX make sure to %-decode web QUERY_STRING, so we don't have
+#     to always put +'s for spaces
+#
+// TODO Finalize bulk command.
+while (($args = STDIN)) {
+    $do->command(shellwords($args));
+}
+exit(0);
+
+class NoidDo
 {
-	my $line;
-	if ($0 =~ m|noidu[^/]*$|) {	# if called with the URL interface
-		$web = 1;			# orient output for HTTP
-		print "Content-Type: text/plain\n\n";
-		open(STDERR, ">&STDOUT")
-			or die("Can't combine stderr and stdout: $!\n");
-		! defined($ENV{'QUERY_STRING'}) and
-			die("No QUERY_STRING (hence no command) defined.\n");
-		($line = $ENV{'QUERY_STRING'}) =~ tr/+/ /;
-		@ARGV = shellwords($line);
-		#print "ARGV: " . join("|", @ARGV) . "\n";
-	}
-	if ($0 =~ m|noidr[^/]*$|) {	# if called for RewriteMap resolving,
-					# see Apache Rewrite mod documentation
-		$| = 1;		# very important to unbuffer the output
-		$bulkcmd = 1;
-		# yyy should we set a timeout to prevent hanging the server?
-	}
+    public function command()
+    {
+        # Any remaining args should form a noid command.
+        # Look at the command part (if any) now, and complain about
+        # a non-existent database unless the command is "dbcreate".
+        #
+        my $command = shift;
+        if (! defined($command)) {    # if no command arg
+            usage(1, 1, "intro");
+            return(0);
+        }
+        if (! -f $dbname
+                && $command ne 'dbcreate' && $command ne 'help') {
+            # if the database doesn't exist when it needs to
+            bprint(*STDERR, "error: no database ($dbname) "
+                . "-- use dbcreate?\n\n");
+            usage(1, 1, "intro");
+            return(0)
+        }
+        if (grep(/^$command$/, @valid_commands) != 1) {
+            print "error: no such command: $command (",
+                join(" ", @_), ")\n";
+            usage(1, 1, "intro");
+            return(0);
+        }
+        # Perform extra checks in $web case.
+        if ($web && $command eq 'dbcreate') {
+            print qq@error: command "$command" not allowed in URL interface.\n@;
+            usage(1, 1, "intro");
+            return(0);
+        }
+        # It should now be safe to turn off strict 'refs' when we
+        # invoke a command via its subroutine name.
+        #if ($#_ < 0) {
+        #    usage(1);    # yyy say something senstive about $command
+        #usage(1, 1, "intro");
+        #    return(0);
+        #}
 
-	if (! ($contact = who_are_you($web))) {
-		print STDERR "Can't tell who you are: $!\n";
-		exit(1);
-	}
+        no strict 'refs';
+        &$command(@_);
+    }
 
-	if (! GetOptions(
-		'debug'		=> \$debug,	# flag
-		'locktest=i'	=> \$locktest,	# flag
-		'f=s'		=> \$dbdir,	# filesystem directory name
-		'version'	=> \$ver,	# flag
-		'help'		=> \$help,	# flag
-	)) {
-		print "error: GetOptions\n";
-		usage(1, 1, "intro");
-		exit(1);
-	}
-	if ($locktest) {
-		$locktest < 0 and
-			print("error: locktest value must be a positive "
-				. "number of seconds to sleep\n"),
-			exit(0);
-		Noid::locktest($locktest);
-	}
-	$web && $debug and
-		print "contact=$contact, pwd=", `pwd`;
+    #
+    # --- begin almost alphabetic listing of functions ---
+    #
 
-	# Handle -v or -h, and exit early.
-	if ($ver) {
-		# We take our version number from the Noid module version.
-		print qq@This is "noid" version $Noid::VERSION.\n@;
-		exit(0);
-	}
-	if ($help) {
-		# yyy should we encode help output?   print "help:\n";
-		usage(0, 0, "intro");
-		exit(0);
-	}
+    /**
+     * Returns number of elements successfully bound.
+     *
+     * yyy what is the sensible thing to do if (a) no element given,
+     *     (b) if no value, or (c) if there are multiple values?
+     * yyy vbind(..., template, ...)?  nvbind()?
+     *
+     * yyy what about append at the list vs the string level?
+     *
+     * @param string $how
+     * @param string $id
+     * @param string $elem
+     * @param string $value
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function bind($how, $id, $elem, $value)
+    {
+        my $validate = 1;
+        my $noid = Noid::dbopen($dbname, 0);
+        if (! $noid) {
+            print STDERR Noid::errmsg($noid);
+            return(0);
+        }
+        my $report;
+        ! defined($elem) and
+            $elem = "";
+        if ($elem eq ":") {    # expect name/value pairs up to blank line
+            defined($value) and
+                print(STDERR "Why give a value ($value) with an "
+                    . qq@element "$elem"?\n@),
+                Noid::dbclose($noid),
+                return(0);
 
-	# Now try to find a database directory string.
-	# In the special case of dbcreate, we may create
-	# and name the directory on behalf of the user.
-	#
-	if (! defined($dbdir)) {
-		defined($ENV{'NOID'}) and	# is NOID env variable defined?
-			$dbdir = $ENV{'NOID'},
-		1 or
-		$0 =~ m|_([^/]+)$| and		# executable link reveals dbdir?
-			$dbdir = $1,
-		1 or
-			$dbdir = '.',		# else try current directory
-		;
-		if (! defined($dbdir) || $dbdir !~ /\S/) {
-			print "error: no Dbdir\n";
-			usage(1, 1, "intro");
-			exit(1);
-		}
-	}
-	elsif ($web) {
-		print qq@-f option not allowed in URL interface.\n@;
-		return(0);
-	}
-	# Now untaint $dbdir.  yyy we can do better?
-	$dbdir =~ m|^(.*)$| and
-		$dbdir = $1
-	or
-		print("error: bad Dbdir\n"),
-		usage(1, 1, "intro"),
-		exit(1)
-	;
-	$dbname = "$dbdir/NOID/noid.bdb";
+            # To slurp paragraph, apparently safest to use local $/, which
+            local $/;            # disappears when scope exits.
+            $/ = "\n\n";            # Means paragraph mode.
+            my $para = <STDIN> || "";
+            chop $para;    # yyy needed?
+            $para =~ s/^#.*\n//g;        # remove comment lines
+            $para =~ s/\n\s+/ /g;        # merge continuation lines
+            my @elemvals = split(/^([^:]+)\s*:\s*/m, $para);
+            shift @elemvals;        # throw away first null
+            my ($bound, $total) = (0, 0);
+            while (1) {
+                ($elem, $value) = (shift @elemvals, shift @elemvals);
+                ! defined($elem) && ! defined($value) and
+                    last;
+                $total++;
+                ! defined($elem) and
+                    Noid::addmsg($noid,
+                        "error: $id: bad element associated "
+                            . qq@with value "$value".@),
+                    last;
+                ! defined($value) and
+                    $value = "",
+                1 or
+                    chop $value
+                ;
+                $report = Noid::bind($noid, $contact, $validate,
+                    $how, $id, $elem, $value);
+                ! defined($report) and
+                    print(STDERR $report, "\n"),
+                    usage(1, 1, "bind"),
+                    # yyy how/who should log failures in "hard" case
+                or
+                    $bound++,
+                    print($report, "\n"),
+                ;
+            }
+            # yyy summarize for log $total and $bound
+            Noid::dbclose($noid);
+            return(defined($report) ? 1 : 0);
+        }
+        elsif ($elem eq ":-") {        # expect name/value to be rest of file
+            defined($value) and
+                print(STDERR "Why give a value ($value) with an "
+                    . qq@element "$elem"?\n@),
+                Noid::dbclose($noid),
+                return(0);
+    #        while (<STDIN>) {
+    #            next if /^#/ || /^\s*\n/;
+    #            last;        # end at first non-blank, non-comment
+    #        }
+    #        chop;
+    #        ! defined($_) || ! s/^(\w+)\s*:\s*// and
+    #            Noid::addmsg($noid, "error: $id no element to bind."),
+    #            Noid::dbclose($noid),
+    #            return(0);
+    #        $elem = $1;
+    #        $value = $_;
+    #        # To slurp file, apparently safest is to use local $/, which
+    #        local $/;            # disappears when scope exits.
+    #        $value .= <STDIN>;        # $/==undef means file mode.
 
-	# Bulk command mode is signified by a single final argument of "-".
-	# If we're _not_ in bulk command mode, expect a single command
-	# represented by the remaining arguments; do it and exit.
-	#
-	$bulkcmd ||= ($#ARGV == 0 && $ARGV[0] eq "-");
-	if (! $bulkcmd) {
-		do_command(@ARGV);
-		exit(0);
-	}
+            # Read all of STDIN into array "@input_lines".
+            my @input_lines = <STDIN>;
 
-	# If we get here, we're in bulk command mode.  Read, tokenize,
-	# and execute commands from the standard input.  Test with
-	#   curl --data-binary @cmd_file http://dot.ucop.edu/nd/noidu_kt5\?-
-	# where cmd_file contains newline-separated commands.
-	# XXX make sure to %-decode web QUERY_STRING, so we don't have
-	#     to always put +'s for spaces
-	#
-	while (($line = <STDIN>)) {
-		do_command(shellwords($line));
-	}
-	exit(0);
-}
+            # Remove all newlines.
+            foreach (@input_lines) {
+                chomp;
+                }
 
-sub do_command {
+            # Ignore any leading lines that start with a pound sign
+            # or contain nothing but white space.
+            while (scalar(@input_lines) > 0) {
+                if ((substr($input_lines[0], 0, 1) eq "#") ||
+                    ($input_lines[0] =~ /^\s*$/)) {
+                    shift @input_lines;
+                    next;
+                    }
+                last;
+                }
 
-	# Any remaining args should form a noid command.
-	# Look at the command part (if any) now, and complain about
-	# a non-existent database unless the command is "dbcreate".
-	#
-	my $command = shift;
-	if (! defined($command)) {	# if no command arg
-		usage(1, 1, "intro");
-		return(0);
-	}
-	if (! -f $dbname
-			&& $command ne 'dbcreate' && $command ne 'help') {
-		# if the database doesn't exist when it needs to
-		bprint(*STDERR, "error: no database ($dbname) "
-			. "-- use dbcreate?\n\n");
-		usage(1, 1, "intro");
-		return(0)
-	}
-	if (grep(/^$command$/, @valid_commands) != 1) {
-		print "error: no such command: $command (",
-			join(" ", @_), ")\n";
-		usage(1, 1, "intro");
-		return(0);
-	}
-	# Perform extra checks in $web case.
-	if ($web && $command eq 'dbcreate') {
-		print qq@error: command "$command" not allowed in URL interface.\n@;
-		usage(1, 1, "intro");
-		return(0);
-	}
-	# It should now be safe to turn off strict 'refs' when we
-	# invoke a command via its subroutine name.
-	#if ($#_ < 0) {
-	#	usage(1);	# yyy say something senstive about $command
-	#usage(1, 1, "intro");
-	#	return(0);
-	#}
+            # If we don't have any lines, there's a problem.
+            if (scalar(@input_lines) == 0) {
+                print STDERR "error:  no non-blank, non-comment ",
+                    "input.\n";
+                Noid::dbclose($noid);
+                return(0);
+                }
 
-	no strict 'refs';
-	&$command(@_);
-}
+            # There must be an element and a colon on the first line.
+            unless ($input_lines[0] =~ /^\s*(\w+)\s*:\s*(.*)$/) {
+                print STDERR "error:  missing element or colon on ",
+                    "first non-blank, non-comment line.\n";
+                Noid::dbclose($noid);
+                return(0);
+                }
 
-#
-# --- begin almost alphabetic listing of functions ---
-#
+            # Save the element, and any part of the value that there
+            # might be on the first line.
+            $elem = $1;
+            $value = $2;
 
-# yyy what is the sensible thing to do if (a) no element given,
-#     (b) if no value, or (c) if there are multiple values?
-# yyy vbind(..., template, ...)?  nvbind()?
-#
-# Returns number of elements successfully bound.
-#
-# yyy what about append at the list vs the string level?
-sub bind { my( $how, $id, $elem, $value )=@_;
+            # Remove the first line from the array.
+            shift @input_lines;
 
-	my $validate = 1;
-	my $noid = Noid::dbopen($dbname, 0);
-	if (! $noid) {
-		print STDERR Noid::errmsg($noid);
-		return(0);
-	}
-	my $report;
-	! defined($elem) and
-		$elem = "";
-	if ($elem eq ":") {	# expect name/value pairs up to blank line
-		defined($value) and
-			print(STDERR "Why give a value ($value) with an "
-				. qq@element "$elem"?\n@),
-			Noid::dbclose($noid),
-			return(0);
+            # Append any additional lines to the value.
+            foreach (@input_lines) {
+                $value .= "\n" . $_;
+                }
 
-		# To slurp paragraph, apparently safest to use local $/, which
-		local $/;			# disappears when scope exits.
-		$/ = "\n\n";			# Means paragraph mode.
-		my $para = <STDIN> || "";
-		chop $para;	# yyy needed?
-		$para =~ s/^#.*\n//g;		# remove comment lines
-		$para =~ s/\n\s+/ /g;		# merge continuation lines
-		my @elemvals = split(/^([^:]+)\s*:\s*/m, $para);
-		shift @elemvals;		# throw away first null
-		my ($bound, $total) = (0, 0);
-		while (1) {
-			($elem, $value) = (shift @elemvals, shift @elemvals);
-			! defined($elem) && ! defined($value) and
-				last;
-			$total++;
-			! defined($elem) and
-				Noid::addmsg($noid,
-					"error: $id: bad element associated "
-						. qq@with value "$value".@),
-				last;
-			! defined($value) and
-				$value = "",
-			1 or
-				chop $value
-			;
-			$report = Noid::bind($noid, $contact, $validate,
-				$how, $id, $elem, $value);
-			! defined($report) and
-				print(STDERR $report, "\n"),
-				usage(1, 1, "bind"),
-				# yyy how/who should log failures in "hard" case
-			or
-				$bound++,
-				print($report, "\n"),
-			;
-		}
-		# yyy summarize for log $total and $bound
-		Noid::dbclose($noid);
-		return(defined($report) ? 1 : 0);
-	}
-	elsif ($elem eq ":-") {		# expect name/value to be rest of file
-		defined($value) and
-			print(STDERR "Why give a value ($value) with an "
-				. qq@element "$elem"?\n@),
-			Noid::dbclose($noid),
-			return(0);
-#		while (<STDIN>) {
-#			next if /^#/ || /^\s*\n/;
-#			last;		# end at first non-blank, non-comment
-#		}
-#		chop;
-#		! defined($_) || ! s/^(\w+)\s*:\s*// and
-#			Noid::addmsg($noid, "error: $id no element to bind."),
-#			Noid::dbclose($noid),
-#			return(0);
-#		$elem = $1;
-#		$value = $_;
-#		# To slurp file, apparently safest is to use local $/, which
-#		local $/;			# disappears when scope exits.
-#		$value .= <STDIN>;		# $/==undef means file mode.
+            # Put on the final newline.
+            $value .= "\n";
 
-		# Read all of STDIN into array "@input_lines".
-		my @input_lines = <STDIN>;
+            #
+            # Now drop through to end of if-elsif clause to real binding.
+        }
+        # yyy eg, :fragment:Offset:Length:Path
+        # yyy eg, :fragment:Offset:Length:Path
+        # yyy eg, :file:Path
+        # yyy eg, ":xml",
+        elsif ($elem =~ /^:/) {
+            print(STDERR qq@Binding to element syntax "$elem" @
+                . "not supported.\n");
+            Noid::dbclose($noid);
+            return(0);
+        }
+        $report = Noid::bind($noid, $contact, $validate,
+                $how, $id, $elem, $value);
+        ! defined($report) and
+            print(STDERR Noid::errmsg($noid)),
+            usage(0, 1, "bind")
+        or
+            print($report, "\n")
+        ;
+        # yyy make sure return(0)'s do dbclose...
+        Noid::dbclose($noid);
+        return(defined($report) ? 1 : 0);
+    }
 
-		# Remove all newlines.
-		foreach (@input_lines) {
-			chomp;
-			}
+    /**
+     * This routine may not make sense in the URL interface.
+     *
+     * @param string $template
+     * @param string $policy
+     * @param string $naan
+     * @param string $naa
+     * @param string $subnaa
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function dbcreate($template, $policy, $naan, $naa, $subnaa)
+    {
+        my $dbreport = Noid::dbcreate($dbdir, $contact, $template, $policy,
+                $naan, $naa, $subnaa);
+        if (! $dbreport) {
+            print Noid::errmsg(), "\n";
+            return(0);
+        }
+        print $dbreport, "\n";
+        return(1);
+    }
 
-		# Ignore any leading lines that start with a pound sign
-		# or contain nothing but white space.
-		while (scalar(@input_lines) > 0) {
-			if ((substr($input_lines[0], 0, 1) eq "#") ||
-				($input_lines[0] =~ /^\s*$/)) {
-				shift @input_lines;
-				next;
-				}
-			last;
-			}
+    /**
+     * Return infos about database.
+     *
+     * @param string $level
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function dbinfo($level)
+    {
+        $level = "brief"
+            if (! defined($level));
+        my $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (! $noid) {
+            print Noid::errmsg($noid);
+            return(0);
+        }
+        Noid::dbinfo($noid, $level);
+        Noid::dbclose($noid);
+        return(1);
+    }
 
-		# If we don't have any lines, there's a problem.
-		if (scalar(@input_lines) == 0) {
-			print STDERR "error:  no non-blank, non-comment ",
-				"input.\n";
-			Noid::dbclose($noid);
-			return(0);
-			}
+    /**
+     * Fetch elements.
+     *
+     * @param string $id
+     * @param array $elems
+     * @return array
+     */
+    public function fetch($id, $elems)
+    {
+        return(getfetch(1, $id, @elems));
+    }
 
-		# There must be an element and a colon on the first line.
-		unless ($input_lines[0] =~ /^\s*(\w+)\s*:\s*(.*)$/) {
-			print STDERR "error:  missing element or colon on ",
-				"first non-blank, non-comment line.\n";
-			Noid::dbclose($noid);
-			return(0);
-			}
+    /**
+     * Get elements.
+     *
+     * @param string $id
+     * @param array $elems
+     * @return array
+     */
+    public function get($id, $elems)
+    {
+        return(getfetch(0, $id, @elems));
+    }
 
-		# Save the element, and any part of the value that there
-		# might be on the first line.
-		$elem = $1;
-		$value = $2;
+    /**
+     * Helper to get/fetch elements.
+     *
+     * @param integer $verbose
+     * @param string $id
+     * @param array $elems
+     * @return array
+     */
+    protected function _getfetch($verbose, $id, $elems)
+    {
+        my $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (! $noid) {
+            print STDERR Noid::errmsg($noid);
+            return(0);
+        }
+        my $fetched = Noid::fetch($noid, $verbose, $id, @elems);
+        ! defined($fetched) and
+            print(STDERR Noid::errmsg($noid))
+        or
+            print($fetched),
+            $verbose && print("\n")
+        ;
+        Noid::dbclose($noid);
+        return(1);
+    }
 
-		# Remove the first line from the array.
-		shift @input_lines;
+    /**
+     * A useless function to check the module.
+     *
+     * @return void
+     */
+    public function hello()
+    {
+        print "Hello.\n";
+    }
 
-		# Append any additional lines to the value.
-		foreach (@input_lines) {
-			$value .= "\n" . $_;
-			}
+    /**
+     * Return help about a command.
+     *
+     * @param string $topic
+     * @return string
+     */
+    public function help($topic)
+    {
+        my $in_error = 0;
+        my $brief = 0;
+        return(usage($in_error, $brief, $topic));
+    }
 
-		# Put on the final newline.
-		$value .= "\n";
+    # yyy what about a "winnow" routine that is either started
+    #     from cron or is started when an exiting noid call notices
+    #     that there's some harvesting/garbage collecting to do and
+    #     schedules it for, say, 10 minutes hence (by not exiting,
+    #     but sleeping for 10 minutes and then harvesting)?
 
-		#
-		# Now drop through to end of if-elsif clause to real binding.
-	}
-	# yyy eg, :fragment:Offset:Length:Path
-	# yyy eg, :fragment:Offset:Length:Path
-	# yyy eg, :file:Path
-	# yyy eg, ":xml",
-	elsif ($elem =~ /^:/) {
-		print(STDERR qq@Binding to element syntax "$elem" @
-			. "not supported.\n");
-		Noid::dbclose($noid);
-		return(0);
-	}
-	$report = Noid::bind($noid, $contact, $validate,
-			$how, $id, $elem, $value);
-	! defined($report) and
-		print(STDERR Noid::errmsg($noid)),
-		usage(0, 1, "bind")
-	or
-		print($report, "\n")
-	;
-	# yyy make sure return(0)'s do dbclose...
-	Noid::dbclose($noid);
-	return(defined($report) ? 1 : 0);
-}
+    /**
+     * Hold ids.
+     *
+     * @param integer $on_off
+     * @param array $ids
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function hold($on_off, $ids)
+    {
+        my $noid = Noid::dbopen($dbname, 0);
+        if (! $noid) {
+            print STDERR Noid::errmsg($noid);
+            return(0);
+        }
+        if (! Noid::hold($noid, $contact, $on_off, @ids)) {
+            print(STDERR Noid::errmsg($noid));
+            usage(1, 1, "hold");
+            Noid::dbclose($noid);
+            return(0);
+        }
+        print(Noid::errmsg($noid), "\n");    # no error message at all
+        Noid::dbclose($noid);
+        return(1);
+    }
 
-# This routine may not make sense in the URL interface.
-#
-sub dbcreate { my( $template, $policy, $naan, $naa, $subnaa )=@_;
+    /**
+     * Peppermint a noid.
+     *
+     * @param string $n
+     * @param string $elem
+     * @param string $value
+     * @return string
+     */
+    public function peppermint($n, $elem, $value)
+    {
+        mint($n, $elem, $value, 1);
+    }
 
-	my $dbreport = Noid::dbcreate($dbdir, $contact, $template, $policy,
-			$naan, $naa, $subnaa);
-	if (! $dbreport) {
-		print Noid::errmsg(), "\n";
-		return(0);
-	}
-	print $dbreport, "\n";
-	return(1);
-}
+    /**
+     * Mint a noid.
+     *
+     * @param string $n
+     * @param string $elem
+     * @param string $value
+     * @param boolean $pepper
+     * @return string
+     */
+    public function mint($n, $elem, $value, $pepper = false)
+    {
+        if (defined($pepper)) {
+            print STDERR
+                "The peppermint command is not implemented yet.\n";
+            return(0);
+        }
+        if (! defined($n) || $n !~ /^\d+$/) {
+            print STDERR "Argument error: expected positive integer, got ",
+                (defined($n) ? qq@"$n"@ : "nothing"), "\n";
+            usage(1, 1, "mint");
+            return(0);
+        }
+        my $noid = Noid::dbopen($dbname, 0);
+        if (! $noid) {
+            print Noid::errmsg($noid);
+            return(0);
+        }
+        my $id;
+        while ($n--) {
+            if (! defined($id = Noid::mint($noid, $contact, $pepper))) {
+                print STDERR Noid::errmsg($noid);
+                Noid::dbclose($noid);
+                return(0);
+            }
+            print "id: $id\n";
+        }
+        Noid::dbclose($noid);
+        print "\n";
+        return(1);
+    }
 
-sub dbinfo { my( $level )=@_;
+    /**
+     * Add a note.
+     *
+     * @param string $key
+     * @param string $value
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function note($key, $value)
+    {
+        if (! defined($key) || ! defined($value)) {
+            print STDERR
+                "You must supply a key and a value.\n";
+            usage(1, 1, "note");
+            return(0);
+        }
+        my $noid = Noid::dbopen($dbname, 0);
+        ! Noid::note($noid, $contact, $key, $value)
+            and print Noid::errmsg($noid);
+        Noid::dbclose($noid);
+        return(1);
+    }
 
-	$level = "brief"
-		if (! defined($level));
-	my $noid = Noid::dbopen($dbname, DB_RDONLY);
-	if (! $noid) {
-		print Noid::errmsg($noid);
-		return(0);
-	}
-	Noid::dbinfo($noid, $level);
-	Noid::dbclose($noid);
-	return(1);
-}
+    /**
+     * Queue.
+     *
+     * @param string $when
+     * @param array $ids
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function queue($when, $ids)
+    {
+        my $noid = Noid::dbopen($dbname, 0);
+        if (! $noid) {
+            print STDERR Noid::errmsg($noid);
+            return(0);
+        }
+        my @queued = Noid::queue($noid, $contact, $when, @ids);
+        my $retval;
+        ! @queued and
+            $retval = 0,
+            print(STDERR Noid::errmsg($noid), "\n"),
+        1 or
+            $retval = 1,
+            print(join("\n", @queued), "\n"),
+        ;
+        my $n = scalar(grep(! /^error:/, @queued));
+        print("note: $n identifier", ($n == 1 ? "" : "s"), " queued\n");
+        Noid::dbclose($noid);
+        return($retval);
+    }
 
-sub fetch { my( $id, @elems )=@_;
+    /**
+     * Returns the number of valid ids.
+     *
+     * @param string $template
+     * @param array $ids
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function validate($template, $ids)
+    {
+        my $noid = Noid::dbopen($dbname, DB_RDONLY);
+        if (! $noid) {
+            print Noid::errmsg($noid);
+            return(0);
+        }
+        my @valids = Noid::validate($noid, $template, @ids);
+        ! @valids and
+            print(STDERR Noid::errmsg($noid)),
+            Noid::dbclose($noid),
+            usage(1, 1, "validate"),
+            return(0);
 
-	return(getfetch(1, $id, @elems));
-}
+        my @iderrs = grep(/^error:/, @valids);
+        print($_, "\n")
+            for (@valids);
+        Noid::dbclose($noid);
+        return(scalar(@ids) - scalar(@iderrs));
+    }
 
-sub get { my( $id, @elems )=@_;
+    /**
+     * Print a blank (space) in front of every newline.
+     * First arg must be a filehandle.
+     *
+     * @param handle $out
+     * @param array $args
+     * @return string
+     */
+    protected function _bprint($out, $args)
+    {
+        map {s/\n/\n /g} @args;
+        return print $out @args;
+    }
 
-	return(getfetch(0, $id, @elems));
-}
+    /**
+     * Print a message about a topic.
+     *
+     * @param integer $in_error
+     * @param string $brief
+     * @param string $topic
+     * @return integer Always returns 1 so it can be used in boolean blocks.
+     */
+    public function usage($in_error, $brief, $topic)
+    {
+        ! defined($in_error) and
+            $in_error = 1;        # default is to treat as error
+        $in_error and
+            $| = 1;            # flush any pending output
+        my $out =            # where to send output
+            ($in_error ? *STDERR : *STDOUT);
+        ! defined($brief) and
+            $brief = 1;        # default is to be brief
+        $topic ||= "intro";
+        $topic = lc($topic);
 
-sub getfetch { my( $verbose, $id, @elems )=@_;
+        # Initialize info topics if need be.
+        #
+        ! @valid_helptopics and
+            init_help();
+        my @blurbs = grep(/^$topic/, @valid_helptopics);
+        if (scalar(@blurbs) != 1) {
+            print $out (scalar(@blurbs) < 1
+                ? qq@Sorry: nothing under "$topic".\n@
+                : "Help: Your request ($topic), matches more than one "
+                    . "topic:\n\t(" . join(", ", @blurbs) . ").\n"
+                ),
+                " You might try one of these topics:";
+            my @topics = @valid_helptopics;
+            my $n = 0;
+            my $topics_per_line = 8;
+            while (1) {
+                ! @topics and
+                    print("\n "),
+                    last
+                or
+                $n++ % $topics_per_line == 0 and
+                    print("\n\t")
+                or
+                    print(" ", shift(@topics))
+                ;
+            }
+            print "\n\n";
+            return(1);
+        }
+        # If we get here, @blurbs names one story.
+        my $blurb = shift @blurbs;
 
-	my $noid = Noid::dbopen($dbname, DB_RDONLY);
-	if (! $noid) {
-		print STDERR Noid::errmsg($noid);
-		return(0);
-	}
-	my $fetched = Noid::fetch($noid, $verbose, $id, @elems);
-	! defined($fetched) and
-		print(STDERR Noid::errmsg($noid))
-	or
-		print($fetched),
-		$verbose && print("\n")
-	;
-	Noid::dbclose($noid);
-	return(1);
-}
-
-sub hello {
-	print "Hello.\n";
-}
-
-sub help { my( $topic )=@_;
-
-	my $in_error = 0;
-	my $brief = 0;
-	return(usage($in_error, $brief, $topic));
-}
-
-# yyy what about a "winnow" routine that is either started
-#     from cron or is started when an exiting noid call notices
-#     that there's some harvesting/garbage collecting to do and
-#     schedules it for, say, 10 minutes hence (by not exiting,
-#     but sleeping for 10 minutes and then harvesting)?
-
-sub hold { my( $on_off, @ids )=@_;
-
-	my $noid = Noid::dbopen($dbname, 0);
-	if (! $noid) {
-		print STDERR Noid::errmsg($noid);
-		return(0);
-	}
-	if (! Noid::hold($noid, $contact, $on_off, @ids)) {
-		print(STDERR Noid::errmsg($noid));
-		usage(1, 1, "hold");
-		Noid::dbclose($noid);
-		return(0);
-	}
-	print(Noid::errmsg($noid), "\n");	# no error message at all
-	Noid::dbclose($noid);
-	return(1);
-}
-
-sub peppermint { my( $n, $elem, $value )=@_;
-	mint($n, $elem, $value, 1);
-}
-
-sub mint { my( $n, $elem, $value, $pepper )=@_;
-
-	if (defined($pepper)) {
-		print STDERR
-			"The peppermint command is not implemented yet.\n";
-		return(0);
-	}
-	if (! defined($n) || $n !~ /^\d+$/) {
-		print STDERR "Argument error: expected positive integer, got ",
-			(defined($n) ? qq@"$n"@ : "nothing"), "\n";
-		usage(1, 1, "mint");
-		return(0);
-	}
-	my $noid = Noid::dbopen($dbname, 0);
-	if (! $noid) {
-		print Noid::errmsg($noid);
-		return(0);
-	}
-	my $id;
-	while ($n--) {
-		if (! defined($id = Noid::mint($noid, $contact, $pepper))) {
-			print STDERR Noid::errmsg($noid);
-			Noid::dbclose($noid);
-			return(0);
-		}
-		print "id: $id\n";
-	}
-	Noid::dbclose($noid);
-	print "\n";
-	return(1);
-
-}
-
-sub note { my( $key, $value )=@_;
-
-	if (! defined($key) || ! defined($value)) {
-		print STDERR
-			"You must supply a key and a value.\n";
-		usage(1, 1, "note");
-		return(0);
-	}
-	my $noid = Noid::dbopen($dbname, 0);
-	! Noid::note($noid, $contact, $key, $value)
-		and print Noid::errmsg($noid);
-	Noid::dbclose($noid);
-	return(1);
-}
-
-sub queue { my( $when, @ids )=@_;
-
-	my $noid = Noid::dbopen($dbname, 0);
-	if (! $noid) {
-		print STDERR Noid::errmsg($noid);
-		return(0);
-	}
-	my @queued = Noid::queue($noid, $contact, $when, @ids);
-	my $retval;
-	! @queued and
-		$retval = 0,
-		print(STDERR Noid::errmsg($noid), "\n"),
-	1 or
-		$retval = 1,
-		print(join("\n", @queued), "\n"),
-	;
-	my $n = scalar(grep(! /^error:/, @queued));
-	print("note: $n identifier", ($n == 1 ? "" : "s"), " queued\n");
-	Noid::dbclose($noid);
-	return($retval);
-}
-
-# Returns the number of valid ids.
-sub validate { my( $template, @ids )=@_;
-
-	my $noid = Noid::dbopen($dbname, DB_RDONLY);
-	if (! $noid) {
-		print Noid::errmsg($noid);
-		return(0);
-	}
-	my @valids = Noid::validate($noid, $template, @ids);
-	! @valids and
-		print(STDERR Noid::errmsg($noid)),
-		Noid::dbclose($noid),
-		usage(1, 1, "validate"),
-		return(0);
-
-	my @iderrs = grep(/^error:/, @valids);
-	print($_, "\n")
-		for (@valids);
-	Noid::dbclose($noid);
-	return(scalar(@ids) - scalar(@iderrs));
-}
-
-# Print a blank (space) in front of every newline.
-# First arg must be a filehandle.
-#
-sub bprint { my( $out, @args )=@_;
-	map {s/\n/\n /g} @args;
-	return print $out @args;
-}
-
-# Always returns 1 so it can be used in boolean blocks.
-#
-sub usage { my( $in_error, $brief, $topic )=@_;
-
-	! defined($in_error) and
-		$in_error = 1;		# default is to treat as error
-	$in_error and
-		$| = 1;			# flush any pending output
-	my $out =			# where to send output
-		($in_error ? *STDERR : *STDOUT);
-	! defined($brief) and
-		$brief = 1;		# default is to be brief
-	$topic ||= "intro";
-	$topic = lc($topic);
-
-	# Initialize info topics if need be.
-	#
-	! @valid_helptopics and
-		init_help();
-	my @blurbs = grep(/^$topic/, @valid_helptopics);
-	if (scalar(@blurbs) != 1) {
-		print $out (scalar(@blurbs) < 1
-			? qq@Sorry: nothing under "$topic".\n@
-			: "Help: Your request ($topic), matches more than one "
-				. "topic:\n\t(" . join(", ", @blurbs) . ").\n"
-			),
-			" You might try one of these topics:";
-		my @topics = @valid_helptopics;
-		my $n = 0;
-		my $topics_per_line = 8;
-		while (1) {
-			! @topics and
-				print("\n "),
-				last
-			or
-			$n++ % $topics_per_line == 0 and
-				print("\n\t")
-			or
-				print(" ", shift(@topics))
-			;
-		}
-		print "\n\n";
-		return(1);
-	}
-	# If we get here, @blurbs names one story.
-	my $blurb = shift @blurbs;
-
-	# Big if-elsif clause to switch on requested topic.
-	#
-	# Note that we try to make the output conform to ANVL syntax;
-	# in the case of help output, every line tries to be a continuation
-	# line for the value of an element called "Usage".  To do this we
-	# pass all output through a routine that just adds a space after
-	# every newline.  The end of the output should end the ANVL record,
-	# so we print "\n\n" at the end.
-	#
-	my ($t, $i);
-	if ($blurb eq "intro") {
-		bprint $out,
+        # Big if-elsif clause to switch on requested topic.
+        #
+        # Note that we try to make the output conform to ANVL syntax;
+        # in the case of help output, every line tries to be a continuation
+        # line for the value of an element called "Usage".  To do this we
+        # pass all output through a routine that just adds a space after
+        # every newline.  The end of the output should end the ANVL record,
+        # so we print "\n\n" at the end.
+        #
+        my ($t, $i);
+        if ($blurb eq "intro") {
+            bprint $out,
 qq@Usage:
-              noid [-f Dbdir] [-v] [-h] Command Arguments@, ($brief ? qq@
-              noid -h             (for help with a Command summary).@
-	: qq@
+            noid [-f Dbdir] [-v] [-h] Command Arguments@, ($brief ? qq@
+            noid -h             (for help with a Command summary).@
+    : qq@
 
 Dbdir defaults to "." if not found from -f or a NOID environment variable.
 For more information try "perldoc noid" or "noid help Command".  Summary:
 @);
-		$brief and
-			print("\n\n"),
-			return(1);
-		for $t (@valid_commands) {
-			$i = $info{"$t/brief"};
-			! defined($i) || ! $i and
-				next;
-			bprint $out, $i;
-		}
-bprint $out, qq@
+            $brief and
+                print("\n\n"),
+                return(1);
+            for $t (@valid_commands) {
+                $i = $info{"$t/brief"};
+                ! defined($i) || ! $i and
+                    next;
+                bprint $out, $i;
+            }
+    bprint $out, qq@
 If invoked as "noidu...", output is formatted for a web client.  Give Command
 as "-" to run a block of noid Commands read from stdin or from POST data.@;
-		print "\n\n";
-		return(1);
-	}
-	#elsif $blurb eq "dbcreate" and print $out $info{$blurb}
-	#or
-	#$blurb eq "bind" and print $out
-	$brief and
-		$blurb .= "/brief";
-	$t = $info{$blurb};
-	if (! defined($t) || ! $t) {
-		print $out qq@Sorry: no information on "$blurb".\n\n@;
-		return(1);
-	}
-	bprint $out, $t;
-	print "\n";
-	return(1);
+            print "\n\n";
+            return(1);
+        }
+        #elsif $blurb eq "dbcreate" and print $out $info{$blurb}
+        #or
+        #$blurb eq "bind" and print $out
+        $brief and
+            $blurb .= "/brief";
+        $t = $info{$blurb};
+        if (! defined($t) || ! $t) {
+            print $out qq@Sorry: no information on "$blurb".\n\n@;
+            return(1);
+        }
+        bprint $out, $t;
+        print "\n";
+        return(1);
 
-# yyy fix these verbose messages
+        # yyy fix these verbose messages
 
-my $yyyy = qq@
+        my $yyyy = qq@
 Called as "noid", an id generator accompanies every COMMAND.  Called as
 "noi", the id generator is supplied implicitly by looking first for a
 NOID environment variable and, failing that, for a file calld ".noid" in
 the current directory.  Examples show the explicit form.  To create a
 generator, use
 
-	noid ck8 dbcreate TPL SNAA
+    noid ck8 dbcreate TPL SNAA
 
 where you replace TPL with a template that defines the shape and number
 of all identifiers to be minted by this generator.  You replace SNAA with
@@ -725,7 +833,7 @@ will be responsible for this generator; for example, if the Online Archive
 of California is the sub-authority for a template, SNAA could be "oac".
 This example of generator intialization,
 
-	noid oac.noid dbcreate pd2.wwdwwdc oac
+    noid oac.noid dbcreate pd2.wwdwwdc oac
 
 sets up the "oac.noid" identifier generator.  It can create "nice opaque
 identifiers", such as "pd2pq5dk9z", suitable for use as persistent
@@ -749,22 +857,27 @@ initializes a generator of sequential numbers.  Instead of seemingly random
 creates sequentially generated number.  Use '0s'
 to indicate a constant width number padded on the left with zeroes.
 @;
-	return(1);
-}
+        return(1);
+    }
 
-sub init_help {
-
-	# For convenient maintenance, we store individual topics in separate
-	# array elements.  So as not to slow down script start up, we don't
-	# pre-load anything.  In this way only the requester of help info,
-	# who does not need speed for this purpose, pays for it.
-	#
-	@valid_helptopics = qw(
-		intro all templates
-	);
-	push(@valid_helptopics, @valid_commands);
-	%info = (
-		'bind/brief' =>
+    /**
+     * Helper to manage help messages.
+     *
+     * @return integer 1
+     */
+    protected function _init_help()
+    {
+        # For convenient maintenance, we store individual topics in separate
+        # array elements.  So as not to slow down script start up, we don't
+        # pre-load anything.  In this way only the requester of help info,
+        # who does not need speed for this purpose, pays for it.
+        #
+        @valid_helptopics = qw(
+            intro all templates
+        );
+        push(@valid_helptopics, @valid_commands);
+        %info = (
+        'bind/brief' =>
 q@
    noid bind How Id Element Value	# to bind an Id's Element, where
       How is set|add|insert|new|replace|mint|append|prepend|delete|purge.
@@ -772,19 +885,19 @@ q@
       fetch returns variable values.  Use ":" as Element to read Elements
       and Values up to a blank line from stdin (up to EOF with ":-").
 @,
-		'bind' =>
+        'bind' =>
 q@@,
-		'dbinfo/brief' =>
+        'dbinfo/brief' =>
 q@@,
-		'dbinfo' =>
+        'dbinfo' =>
 q@@,
-		'dbcreate/brief' =>
+        'dbcreate/brief' =>
 q@
    noid dbcreate [ Template (long|-|short) [ NAAN NAA SubNAA ] ]
       where Template=prefix.Tmask, T=(r|s|z), and mask=string of (e|d|k)
 @,
 
-		'dbcreate' =>
+        'dbcreate' =>
 q|
 To create an identifier minter governed by Template and Term ("long" or "-"),
 
@@ -808,11 +921,11 @@ is also a character string, but it is a locally determined and possibly
 structured subauthority string (e.g., "oac", "ucb/dpg", "practice_area") that
 is not globally registered.
 |,
-		'fetch/brief' =>
+        'fetch/brief' =>
 q@
    noid fetch Id Element ...		# fetch/map one or more Elements
 @,
-		'fetch' =>
+        'fetch' =>
 q@
 To bind,
 
@@ -820,97 +933,103 @@ To bind,
 
 sets "myGoto" element of identifier "fk0wqkb" to a string (here a URL).
 @,
-		'get/brief' =>
+        'get/brief' =>
 q@
    noid get Id Element ...		# fetch/map Elements without labels
 @,
-		'get' =>
+        'get' =>
 q@@,
-		'hello/brief' =>
+        'hello/brief' =>
 q@@,
-		'hello' =>
+        'hello' =>
 q@@,
-		'hold/brief' =>
+        'hold/brief' =>
 q@
    noid hold (set|release) Id ...	# place or remove a "hold" on Id(s)
 @,
-		'hold' =>
+        'hold' =>
 q@@,
-		'mint/brief' =>
+        'mint/brief' =>
 q@
    noid mint N [ Elem Value ]	# to mint N identifiers (optionally binding)
 @,
-		'mint' =>
+        'mint' =>
 q@@,
-		'note/brief' =>
+        'note/brief' =>
 q@@,
-		'note' =>
+        'note' =>
 q@@,
-		'peppermint/brief' =>
+        'peppermint/brief' =>
 q@@,
-		'peppermint' =>
+        'peppermint' =>
 q@@,
-		'queue/brief' =>
+        'queue/brief' =>
 q@
    noid queue (now|first|lvf|Time) Id ...	# queue (eg, recycle) Id(s)
       Time is NU, meaning N units, where U= d(ays) | s(econds).
       With "lvf" (Lowest Value First) lowest value of id will mint first.
 @,
-		'queue' =>
+        'queue' =>
 q@@,
 
-		'validate/brief' =>
+        'validate/brief' =>
 q@
    noid validate Template Id ...	# to check if Ids are valid
       Use Template of "-" to use the minter's native template.
 @,
-		'validate' =>
+        'validate' =>
 q@@,
-	);
-	return(1);
+        );
+        return(1);
+    }
+
+    /**
+     * Return info about user running noid.
+     *
+     * @param string $web
+     * @return string
+     */
+    protected function _who_are_you($web)
+    {
+        my $user;
+        if ($web) {
+            $user = $ENV{'REMOTE_USER'} || '';
+            my $host = $ENV{'REMOTE_HOST'} || $ENV{'REMOTE_ADDR'} || '';
+            $user .= '@' . $host;
+        }
+
+        # Look up by REAL_USER_ID first.
+        my ($name, undef, undef, $gid) = getpwuid($<);
+        my $ugid = getlogin() || $name;
+        ! $ugid and
+            return "";
+        $ugid .= "/" . ((getgrgid($gid))[0] || "");
+
+        # If EFFECTIVE_USER_ID differs from REAL_USER_ID, get its info too.
+        if ($> ne $<) {
+            ($name, undef, undef, $gid) = getpwuid($>);
+            ! $name and
+                return "";
+            $ugid .= " ($name/" . ((getgrgid($gid))[0] || "") . ")";
+        }
+        $user = ($user ? "$user $ugid" : $ugid);
+        return $user;
+    }
 }
-
-sub who_are_you { my( $web )=@_;
-
-	my $user;
-	if ($web) {
-		$user = $ENV{'REMOTE_USER'} || '';
-		my $host = $ENV{'REMOTE_HOST'} || $ENV{'REMOTE_ADDR'} || '';
-		$user .= '@' . $host;
-	}
-
-	# Look up by REAL_USER_ID first.
-	my ($name, undef, undef, $gid) = getpwuid($<);
-	my $ugid = getlogin() || $name;
-	! $ugid and
-		return "";
-	$ugid .= "/" . ((getgrgid($gid))[0] || "");
-
-	# If EFFECTIVE_USER_ID differs from REAL_USER_ID, get its info too.
-	if ($> ne $<) {
-		($name, undef, undef, $gid) = getpwuid($>);
-		! $name and
-			return "";
-		$ugid .= " ($name/" . ((getgrgid($gid))[0] || "") . ")";
-	}
-	$user = ($user ? "$user $ugid" : $ugid);
-	return $user;
-}
-
 exit 0;
 
 1;
 
 # yyy Possible for 'c' mask char:
-#	ASCII 33 to 126 (no SPACE, no DEL)  --> 94 (not prime)
-#	MINUS the 5 chars:  / \ - % "       --> 89 (prime)
-#    or MINUS the 5 chars:  / \ - % .       --> 89 (prime)
-#    or MINUS the 5 chars:  / \ - % SPACE   --> 89 (prime)
+#     ASCII 33 to 126 (no SPACE, no DEL)  --> 94 (not prime)
+#     MINUS the 5 chars:  / \ - % "       --> 89 (prime)
+#  or MINUS the 5 chars:  / \ - % .       --> 89 (prime)
+#  or MINUS the 5 chars:  / \ - % SPACE   --> 89 (prime)
 #
 # Note: current (1/2004) restrictions on ARKs are alphanums plus
-#	= @ $ _ * + #
+#    = @ $ _ * + #
 # with the following reserved for special purposes
-#	/ . - %
+#    / . - %
 
 # yyy noid example:  shuffle play (as in random song list)
 # yyy bind is pair-wise or triple-wise?  (how to explain consistently)
@@ -918,6 +1037,7 @@ exit 0;
 # yyy add java class to distro
 # yyy add pdf of doc to distro
 
+/**
 __END__
 
 =pod
@@ -958,7 +1078,7 @@ relatively small footprint.  They use BerkeleyDB as the underlying database.
 
 An identifier generated by a B<noid> minter is also known generically
 as a "noid" (standing for nice opaque identifier and rhyming with void).
-While a minter can record and bind any identifiers 
+While a minter can record and bind any identifiers
 that you bring to its attention, often it is used to generate, bringing
 to your attention, identifier strings that carry no widely recognizable
 meaning.  This semantic opaqueness reduces their vulnerability to era-Z<>
@@ -1024,14 +1144,14 @@ cdlib dot org.
 Identifiers will emerge in "quasi-random" order, each consisting of six
 characters matching up one-for-one with the letters C<eedeed>.
 
-  noid mint 1
+    noid mint 1
 
 The first identifier should be C<13030/f54x54g11>, with the namespace
 ranging from a low of C<13030/f5000000s> to a high of C<13030/f5zz9zz94>.
 You can create a "locations" element under a noid and bind three URLs
 to it with the command,
 
-  noid bind set 13030/f54x54g11 locations \
+    noid bind set 13030/f54x54g11 locations \
     'http://a.b.org/foo|http://c.d.org/bar|http://e.f.org/zaf'
 
 The template's final C<k> causes a computed check character to be added
@@ -1043,13 +1163,13 @@ characters.  The next command takes three identifiers that someone
 might ask you about and determines that, despite appearances, only the
 first is in the namespace of this minter.
 
-  noid validate - 13030/f54x54g11 13030/f54y54g11 \
+    noid validate - 13030/f54x54g11 13030/f54y54g11 \
     13030/f54x45g11
 
 To make way for creation of another minter, you can move the entire
 minter into a subdirectory with the command,
 
-  mkdir f57 ; mv NOID f57
+    mkdir f57 ; mv NOID f57
 
 A minter may be set up on a web server, allowing the NAA organization
 easily to distribute name assigment to trusted parties operating from
@@ -1057,7 +1177,7 @@ remote locations.  The URL INTERFACE section describes the procedure in
 detail.  Once set up, you could mint one identifier by entering a URL such
 as the following into your web browser:
 
-  http://foo.ucop.edu/nd/noidu_f57?mint+1 
+    http://foo.ucop.edu/nd/noidu_f57?mint+1
 
 Using a different procedure, you can also make your identifier bindings
 (e.g., location information) visible to the Internet via a few web server
@@ -1443,7 +1563,7 @@ the noid B<dbcreate> command to govern how identifiers will be minted.
 The Prefix, which may be empty, specifies an initial constant string.
 For example, upon database creation, in the Template
 
-  tb7r.zdd
+    tb7r.zdd
 
 the Prefix says that every minted identifier will begin with the literal
 string C<tb7r>.  Each identifier will end in at least two digits (C<dd>),
@@ -1451,7 +1571,7 @@ and because of the C<z> they will be sequentially generated without limit.
 Beyond the first 100 mint operations, more digits will be added as needed.
 The minted noids will be, in order,
 
-  tb7r00, tb7r01, ..., tb7r100, tb7r101, ..., tb7r1000, ...
+    tb7r00, tb7r01, ..., tb7r100, tb7r101, ..., tb7r1000, ...
 
 The period (".") in the Template does not appear in the identifiers but
 serves to separate the constant first part (Prefix) from the variable
@@ -1473,7 +1593,7 @@ to mint sequential 6-digit numbers, stopping after millionth
 =item C<.zd>
 
 sequential numbers without limit, adding new digits as needed
- 
+
 =item C<bc.rdddd>
 
 random 4-digit numbers with constant prefix C<bc>
@@ -1606,7 +1726,7 @@ appended after first computing it on the entire identifier generated so
 far, including the NAAN if one was specified at database creation time.
 For example, the final digit C<1> in
 
-        13030/f54x54g11 
+        13030/f54x54g11
 
 was first computed over the string C<13030/f54x54g1> and then added to the end.
 
@@ -1640,14 +1760,14 @@ If the Id begins with "ft", it would then try to replace the "ft" with
 "g7h" and return the result as if it were a stored value.  So if the Id
 were C<ft89xr2t>, the command
 
-   noid get ft89xr2t redirect
+    noid get ft89xr2t redirect
 
 would return C<g7h89xr2t>.  Fancier substitutions are possible, including
 replacement patterns that reference subexpressions in the original
 matching I<Idpattern>.  For example, the second command below,
 
-   noid bind set ':idmap/^ft([^x]+)x(.*)' my_elem '$2/g7h/$1'
-   noid get ft89xr2t my_elem
+    noid bind set ':idmap/^ft([^x]+)x(.*)' my_elem '$2/g7h/$1'
+    noid get ft89xr2t my_elem
 
 would return C<r2t/g7h/89>.  For ease of implementation, internally this kind
 of binding is stored and reported (which can be confusing) as the special
@@ -1664,14 +1784,14 @@ more noid minter databases.  In this example, the directory is F<htdocs/nd>
 and we'll assume the B<noid> script was originally installed in
 F</usr/local/bin>.
 
-        mkdir htdocs/nd
-        cp -p /usr/local/bin/noid htdocs/nd/
+    mkdir htdocs/nd
+    cp -p /usr/local/bin/noid htdocs/nd/
 
 The second command above creates an executable copy of the noid script
 that will be linked to for each minter you intend to expose to the web.
 To make your server recognize such links, include the line
 
- ScriptAliasMatch ^/nd/noidu(.*) "/srv/www/htdocs/nd/noidu$1"
+  ScriptAliasMatch ^/nd/noidu(.*) "/srv/www/htdocs/nd/noidu$1"
 
 in your server configuration file and restart the server before trying the
 commands that follow.  If you did not install the supporting F<Noid.pm>
@@ -1684,12 +1804,12 @@ Because it will be running under a special user at that time, before you
 create it, first become the user that your server runs under.  In this
 example that user is "wwwrun".
 
-        cd htdocs/nd
-        su wwwrun
-        noid dbcreate kt.reeded
-        mkdir kt5
-        mv NOID kt5/
-        ln noid noidu_kt5
+    cd htdocs/nd
+    su wwwrun
+    noid dbcreate kt.reeded
+    mkdir kt5
+    mv NOID kt5/
+    ln noid noidu_kt5
 
 The third command above creates a minter for noids beginning with
 C<kt> followed by 5 characters.  The minter is then moved into its own
@@ -1708,32 +1828,32 @@ available from the URL interface.
 To mint one identifier, you could enter the following URL into your
 web browser, but replace "foo.ucop.edu" with your server's name:
 
-    http://foo.ucop.edu/nd/noidu_kt5?mint+1 
+    http://foo.ucop.edu/nd/noidu_kt5?mint+1
 
 Reload to mint again. If you change the 1 to 20, you get twenty new and
 different noids.
 
-    http://foo.ucop.edu/nd/noidu_kt5?mint+20 
+    http://foo.ucop.edu/nd/noidu_kt5?mint+20
 
 To bind some data to an element called "myGoto" under one of the noids
-already minted, 
+already minted,
 
     http://foo.ucop.edu/nd/noidu_kt5?
-        bind+set+13030/kt639k9+myGoto+http://foo.ucsd.edu/ 
+        bind+set+13030/kt639k9+myGoto+http://foo.ucsd.edu/
 
 In this case we stored a URL in "myGoto".  This kind of convention can
 underly a redirection mechanism that is part of an organization's overall
-identifier resolution strategy.  To retrieve that stored data, 
+identifier resolution strategy.  To retrieve that stored data,
 
-  http://foo.ucop.edu/nd/noidu_kt5?get+13030/kt639k9+myGoto 
+    http://foo.ucop.edu/nd/noidu_kt5?get+13030/kt639k9+myGoto
 
 Bulk operations can be performed over the web by invoking the URL with a
 query string of just "-", which will cause the minter to look for noid
 commands, one per line, in the POST data part of the HTTP request.  If
 you put noid commands in a file F<myCommands> and run the Unix utility
 
-  curl --data-binary @myCommands \
-    'http://foo.ucop.edu/nd/noidu_kt5?-'
+    curl --data-binary @myCommands \
+        'http://foo.ucop.edu/nd/noidu_kt5?-'
 
 you could, for example, change the "myGoto" bindings for 500 noids
 in that one shell command.  The output from each command in the file
@@ -1772,15 +1892,15 @@ in your web server document tree where you will place one or more noid
 resolver databases.  In this example (and in the previous example),
 we use F<htdocs/nd>:
 
-        mkdir htdocs/nd
-        cp -p /usr/local/bin/noid htdocs/nd/
+    mkdir htdocs/nd
+    cp -p /usr/local/bin/noid htdocs/nd/
 
 The second command above creates an executable copy of the noid script
 that will be linked to for each resolver you intend to expose.  To make
 your server recognize such links, include the line (this is slightly
 different from the similar line in the previous section),
 
- ScriptAliasMatch ^/nd/noidr(.*) "/srv/www/htdocs/nd/noidr$1"
+  ScriptAliasMatch ^/nd/noidr(.*) "/srv/www/htdocs/nd/noidr$1"
 
 in your server configuration file.  If you did not install the supporting
 F<Noid.pm> module normally, you may also have to store a copy of it next
@@ -1788,12 +1908,12 @@ to the script.  Then include the following lines in the configuration file;
 they form the start of a rewriting rule section that you will add to later
 for each resolver that you set up.
 
-        RewriteEngine on
-        # These next two files and their containing
-        # directory should be owned by "wwwrun".
-        RewriteLock   /var/log/rewrite/lock
-        RewriteLog    /var/log/rewrite/log
-        ## RewriteLogLevel 9
+  RewriteEngine on
+  # These next two files and their containing
+  # directory should be owned by "wwwrun".
+  RewriteLock   /var/log/rewrite/lock
+  RewriteLog    /var/log/rewrite/log
+  ## RewriteLogLevel 9
 
 The non-comment lines above initialize the rewriting system, identify the
 lock file used to synchronize access to the resolver, and identify the log
@@ -1815,11 +1935,11 @@ server is assumed to run under the user "wwwrun" and the database resides
 in F<htdocs/nd/kt5>.  As if our intentions included persistent identification,
 the minter in this example is for generating long term identifiers.
 
-        cd htdocs/nd
-        noid dbcreate kt.reeded long 13030 cdlib.org dpg
-        mkdir kt5
-        mv NOID kt5/
-        ln noid noidr_kt5
+    cd htdocs/nd
+    noid dbcreate kt.reeded long 13030 cdlib.org dpg
+    mkdir kt5
+    mv NOID kt5/
+    ln noid noidr_kt5
 
 The last command makes a new hard link (not a soft link) to the noid
 script, which for this resolver will be invoked under the name B<noidr_kt5>.
@@ -1833,18 +1953,18 @@ of Rewrite Rules.  This is done using server configuration file lines as
 shown in the next example.  As with any change to the file, you will need
 to restart the server before it will have the desired effect.
 
- # External resolution; start program once on server start
- RewriteMap  rslv           prg:/srv/www/htdocs/nd/noidr_kt5
- # Main lookup; add artificial prefix for subsequent testing
- RewriteRule ^/ark:/(13030/.*)$ "_rslv_${rslv:get $1 myGoto}"
+  # External resolution; start program once on server start
+  RewriteMap  rslv           prg:/srv/www/htdocs/nd/noidr_kt5
+  # Main lookup; add artificial prefix for subsequent testing
+  RewriteRule ^/ark:/(13030/.*)$ "_rslv_${rslv:get $1 myGoto}"
 
- # Test: redirect [R] if it looks like a redirect
- RewriteRule ^_rslv_([^:]*://.*)$    $1 [R]
- # Test: strip prefix; pass through [PT] if intended for us
- RewriteRule ^_rslv_(/.*)$           $1 [PT]
- # Test: restore value if lookup failed; let come what may
- RewriteRule ^_rslv_$                %{REQUEST_URI}
- # Alternative: redirect failed lookup to a global resolver
+  # Test: redirect [R] if it looks like a redirect
+  RewriteRule ^_rslv_([^:]*://.*)$    $1 [R]
+  # Test: strip prefix; pass through [PT] if intended for us
+  RewriteRule ^_rslv_(/.*)$           $1 [PT]
+  # Test: restore value if lookup failed; let come what may
+  RewriteRule ^_rslv_$                %{REQUEST_URI}
+  # Alternative: redirect failed lookup to a global resolver
 
 When a request received by the server matches a Rewrite Rule, an attempt
 to resolve it via the running B<noidr...> script is made.  In this example,
@@ -1854,11 +1974,11 @@ resolvable.  Building on the example from the previous section, assume the
 element "myGoto" holds the same URL as before for the noid C<13030/kt639k9>.
 A browser retrieval request made by entering or clicking on
 
-        http://foo.ucop.edu/ark:/13030/kt639k9
+    http://foo.ucop.edu/ark:/13030/kt639k9
 
 would then result in a server redirect to
 
-        http://foo.ucsd.edu/ 
+    http://foo.ucsd.edu/
 
 The resolution result for an identifier is whatever the B<get> returns,
 which could as easily have retrieved a stored value as a rule-based
@@ -1940,7 +2060,7 @@ modulo I<R> (divide the sum by I<R> and take the remainder).
 In the example, I<891 = 21> mod I<R> (29) and so the check digit is C<q>.
 This is appended to obtain the "checked substring", which is
 
-C<    13030/xf93gt2q	   >(substring with check digit appended)
+C<    13030/xf93gt2q       >(substring with check digit appended)
 
 What follows is a two-part proof that this algorithm is "perfect" with
 respect to single digit and transposition errors.
@@ -1952,7 +2072,7 @@ then the check digit (xdigit) also differs.  If the I<n>-th xdigit's
 ordinal is I<d> in one string and I<e> in another, the sums of products
 differ only by
 
-   (... + nd + ...) - (... + ne + ...) = n(d - e)
+(... + nd + ...) - (... + ne + ...) = n(d - e)
 
 The check digits differ only if I<n(d - e)> is not I<0> mod I<R>.  Assume
 (contrapositively) that I<n(d - e)> does equal I<0> mod I<R>.  First, we
@@ -1960,12 +2080,12 @@ know that I<n(d - e)> is not zero because I<n> is positive and I<d> is
 different from I<e>.  Therefore, there must be at least one positive
 integer I<i> such that
 
-   n(d - e) = Ri     =>     (n/i)(d - e) = R
+    n(d - e) = Ri     =>     (n/i)(d - e) = R
 
 Now, because I<R> is prime,
 
-   either   (a)  n/i = 1    and   d - e = R
-   or       (b)  n/i = R    and   d - e = 1
+    either   (a)  n/i = 1    and   d - e = R
+    or       (b)  n/i = R    and   d - e = 1
 
 But (a) cannot hold because xdigit ordinals differ by at most I<R-1>.
 This leaves (b), which implies that there is an integer I<i = n/R>.
@@ -1986,9 +2106,9 @@ and if another string is the same except for having I<d> in position I<i>
 and I<e> in position I<j>, then the check digits also differ.  The sums
 of the products differ by
 
-   (... + ie + ... + jd + ...) - (... + id + ... + je + ...)
-       = (ie + jd) - (id + je) = e(i - j) + d(j - i)
-       =  d(j - i) - e(j - i)  = n(d - e)
+    (... + ie + ... + jd + ...) - (... + id + ... + je + ...)
+        = (ie + jd) - (id + je) = e(i - j) + d(j - i)
+        =  d(j - i) - e(j - i)  = n(d - e)
 
 where I<< n = j - i > 0 >> and I<< n < R >>.  The check digits differ
 only if I<n(d - e) = 0> mod I<R>.  This reduces to the central statement
@@ -2014,12 +2134,12 @@ for much more compact identifiers (cf. UUID/GUID), possibly also a way
 of asking that the last character of the repertoire only appear in the
 check character (e.g., for i and x below).
 
- { 0-9 x }			 cardinality 11, mask char i
- { 0-9 a-f _ }			 cardinality 17, mask char x
- { 0-9 a-z _ }			 cardinality 37, mask char v
- { 1-9 b-z B-Z } - {l, vowels}	 cardinality 47, mask char E
- { 0-9 a-z A-Z # * + @ _ }	 cardinality 67, mask char w
- Visible ASCII - { % - . / \ } 	 cardinality 89, mask char c
+  { 0-9 x }             cardinality 11, mask char i
+  { 0-9 a-f _ }             cardinality 17, mask char x
+  { 0-9 a-z _ }             cardinality 37, mask char v
+  { 1-9 b-z B-Z } - {l, vowels}     cardinality 47, mask char E
+  { 0-9 a-z A-Z # * + @ _ }     cardinality 67, mask char w
+  Visible ASCII - { % - . / \ }      cardinality 89, mask char c
 
 Add support for simple file management associated with identifiers.
 For example, minting (and reminting) the noid C<xv8t984> could result in
@@ -2088,3 +2208,4 @@ UNIX : System_administration
 Web
 
 =cut
+*/
