@@ -592,15 +592,16 @@ class Noid
         # yyy how come tie doesn't complain if it exists already?
 
         if (file_exists($dbname)) {
-            $this->addmsg(null, sprintf('error: a NOID database already exists in %s',
-                    ($dbdir !== '.' ? '"' . $dbdir . '".' : 'the current directory.')). PHP_EOL
+            $this->addmsg(null, sprintf('error: a NOID database already exists in %s.',
+                    ($dbdir === '.' ? 'the current directory' : '"' . $dbdir . '"')). PHP_EOL
                 . "\t" . 'To permit creation of a new minter, rename' . PHP_EOL
                 . "\t" . 'or remove the entire NOID subdirectory.');
             return;
         }
 
         if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-            $this->addmsg(null, sprintf("error: couldn't create database directory %s: %s", $dir, $!));
+            $error = error_get_last();
+            $this->addmsg(null, sprintf("error: couldn't create database directory %s: %s", $dir, $error['message']));
             return;
         }
 
@@ -659,16 +660,19 @@ class Noid
         # before calling dbopen().
         #
         if (! $this->_storefile("$dir/log", '') || ! chmod(0666, "$dir/log")) {
-            $this->addmsg(null, sprintf("Couldn't chmod log file: %s", $!));
+            $error = error_get_last();
+            $this->addmsg(null, sprintf("Couldn't chmod log file: %s", $error['message']));
             return;
         }
         if (! $this->_storefile("$dir/logbdb", '') || ! chmod(0666, "$dir/logbdb")) {
-            $this->addmsg(null, sprintf("Couldn't chmod logbdb file: %s", $!)),
+            $error = error_get_last();
+            $this->addmsg(null, sprintf("Couldn't chmod logbdb file: %s", $error['message']));
             return;
         }
         $noid = $this->dbopen($dbname, DB_CREATE);
         if (! $noid) {
-            $this->addmsg(null, sprintf("can't create database file: %s", $!));
+            $error = error_get_last();
+            $this->addmsg(null, sprintf("can't create database file: %s", $error['message']));
             return;
         }
         $this->logmsg($noid, $template
@@ -771,7 +775,8 @@ class Noid
 
         #   $child_process_id = null;
         #   if (!isset($child_process_id = open(CHILD, '-|'))) {
-        #       die "unable to start child process, $!, stopped";
+        #       $error = error_get_last();
+        #       die "unable to start child process, $error['message'], stopped";
         #   }
         #   if ($child_process_id == 0) {
         #       # We are in the child.  Set the PATH environment variable.
@@ -779,7 +784,8 @@ class Noid
         #       # Run the command we want, with its STDOUT redirected
         #       # to the pipe that goes back to the parent.
         #       exec "/bin/hostname";
-        #       die "unable to execute \"/bin/hostname\", $!, stopped";
+        #       $error = error_get_last();
+        #       die "unable to execute \"/bin/hostname\", $error['message'], stopped";
         #   }
         #   else {
         #       # We are in the parent, and the CHILD file handle is
@@ -907,7 +913,8 @@ NAAN:      $naan
         }
         $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         if ($status) {
-            $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $!));
+            $error = error_get_last();
+            $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $error['message']));
             return 0;
         }
         if (strpos($key, "$R/$R") === 0) {
@@ -1049,7 +1056,8 @@ NAAN:      $naan
         $locktype = ($flags & DB_RDONLY) ? LOCK_SH : LOCK_EX;
 
         if (! sysopen(NOIDLOCK, $lockfile, O_RDWR | O_CREAT)) {
-            $this->addmsg(null, sprintf('cannot open "%s": %s', $lockfile, $!);
+            $error = error_get_last();
+            $this->addmsg(null, sprintf('cannot open "%s": %s', $lockfile, $error['getmessage']));
             return;
         }
 
@@ -1141,7 +1149,7 @@ NAAN:      $naan
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    protected function _eachnoid($noid, $key, $value)
+    protected function _eachnoid($noid, &$key, &$value)
     {
         # yyy check that $db is tied?  this is assumed for now
         # yyy need to get next non-admin key/value pair
@@ -1153,8 +1161,6 @@ NAAN:      $naan
         if ($cursor->c_get($key, $value, $flag)) {
             return 0;
         }
-        $_[1] = $key;
-        $_[2] = $value;
         return 1;
     }
 
@@ -1695,7 +1701,8 @@ NAAN:      $naan
         $value = 0;
         $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         if ($status) {
-            return sprintf('error: id2elemval: c_get status/errno (%s/%s)', $status, $!);
+            $error = error_get_last();
+            return sprintf('error: id2elemval: c_get status/errno (%s/%s)', $status, $error['message']);
         }
         if (strpos($key, $first) !== 0) {
             return '';
@@ -1840,7 +1847,8 @@ NAAN:      $naan
             $key = $first;
             $status = $cursor->c_get($key, $id, DB_SET_RANGE);
             if ($status) {
-                $this->addmsg($noid, sprintf('mint: c_get status/errno (%s/%s)', $status, $!));
+                $error = error_get_last();
+                $this->addmsg($noid, sprintf('mint: c_get status/errno (%s/%s)', $status, $error['message']));
                 return;
             }
             # The cursor, key and value are now set at the first item
@@ -2059,7 +2067,8 @@ NAAN:      $naan
                 . ($status ? '' : ' -- note failed'));
         }
         if ($status) {
-            $this->addmsg($noid, sprintf('db->db_put status/errno (%s/%s)', $status, $!));
+            $error = error_get_last();
+            $this->addmsg($noid, sprintf('db->db_put status/errno (%s/%s)', $status, $error['message']));
             return 0;
         }
         return 1;
@@ -2141,11 +2150,12 @@ NAAN:      $naan
      * @param string $message
      * @return integer -1 for no limit, 0 for error, else the total.
      */
-    public function parse_template($template, $prefix, $mask, $gen_type, $message)
+    public function parse_template($template, &$prefix, &$mask, &$gen_type, &$message)
     {
-        $dirname;
-        $msg = \$_[4];   # so we can modify $message argument easily
-        $$msg = '';
+        $msg = &$message;   # so we can modify $message argument easily
+
+        $dirname = null;
+        $msg = '';
 
         # Strip final spaces and slashes.  If there's a pathname,
         # save directory and final component separately.
@@ -2157,30 +2167,30 @@ NAAN:      $naan
         $template = isset($matches[2]) ? $matches[2] : '';
 
         if (empty($template) || $template === '-') {
-            $$msg = 'parse_template: no minting possible.';
-            $_[1] = $_[2] = $_[3] = '';
+            $msg = 'parse_template: no minting possible.';
+            $prefix = $mask = $gen_type = '';
             return self::NOLIMIT;
         }
         if (!preg_match('/^([^\.]*)\.(\w+)/', $template, $matches)) {
-            $$msg = "parse_template: no template mask - can't generate identifiers.";
+            $msg = "parse_template: no template mask - can't generate identifiers.";
             return 0;
         }
         $prefix = isset($matches[1]) ? $matches[1] : '';
         $mask = isset($matches[2]) ? $matches[2] : '';
 
         if (!preg_match('/^[rsz]/', $mask)) {
-            $$msg = 'parse_template: mask must begin with one of the letters' . PHP_EOL
+            $msg = 'parse_template: mask must begin with one of the letters' . PHP_EOL
                 . '"r" (random), "s" (sequential), or "z" (sequential unlimited).';
             return 0;
         }
 
         if (!preg_match('/^.[^k]+k?$/', $mask)) {
-            $$msg = 'parse_template: exactly one check character (k) is allowed, and it may only appear at the end of a string of one or more mask characters.';
+            $msg = 'parse_template: exactly one check character (k) is allowed, and it may only appear at the end of a string of one or more mask characters.';
             return 0;
         }
 
         if (!preg_match('/^.[de]+k?$/', $mask)) {
-            $$msg = 'parse_template: a mask may contain only the letters "d" or "e".';
+            $msg = 'parse_template: a mask may contain only the letters "d" or "e".';
             return 0;
         }
 
@@ -2189,7 +2199,7 @@ NAAN:      $naan
         $has_cc = substr($mask, -1) === 'k';
         foreach (str_split($prefix) as $c) {
             if ($has_cc && $c !== '/' && ! isset($this->_ordxdig[$c])) {
-                $$msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
+                $msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
                     $this->legalstring);
                 return 0;
             }
@@ -2202,9 +2212,9 @@ NAAN:      $naan
         # a template of "ft.rddeek" would be "ft5".
         #
         $masklen = strlen($mask) - 1;    # subtract one for [rsz]
-        $$msg = $prefix . $masklen;
+        $msg = $prefix . $masklen;
         if (substr($mask, 0, 1) === 'z') {           # "+" indicates length can grow
-            $$msg .= '+';
+            $msg .= '+';
         }
 
         # r means random;
@@ -2226,10 +2236,8 @@ NAAN:      $naan
             }
         }
 
-        $_[1] = $prefix;
-        $_[2] = $mask;
-        $_[3] = $gen_type = (substr($mask, 0, 1) === 'r' ? 'random' : 'sequential');
-        # $_[4] was set to the synonym already
+        $gen_type = substr($mask, 0, 1) === 'r' ? 'random' : 'sequential';
+        # $message was set to the synonym already
         return substr($mask, 0, 1) === 'z' ? self::NOLIMIT : $total;
     }
 
