@@ -217,6 +217,64 @@ class NoidBindTest extends PHPUnit_Framework_TestCase
         Noid::dbclose($noid);
     }
 
+    /**
+     * Validate tests for unlimited sequences -- short
+     */
+    public function testGetAlphabets()
+    {
+        $tests = array(
+            'fk.zdep' => false,
+            'fk.zde' => true,
+            'fk.zdeedk' => 'e',
+            'fk.rdeik' => 'e',
+            'fa.rdeik' => 'v',
+            'fk.slwk' => 'w',
+            'fk.rdewk' => 'w',
+            'fk.zixxik' => 'v',
+            'fk.zeixEwk' => 'w',
+            'fk.zlwk' => 'w',
+            'fk.zdcexviEk' => 'c',
+            'fk.rllllk' => 'l',
+        );
+
+        foreach ($tests as $template => $repertoire) {
+            $alphabet = Noid::get_alphabet($template);
+            $this->assertEquals($repertoire, $alphabet,
+                sprintf('Thte template "%s" should have the character repertoire "%s", not "%s".',
+                    $template, $repertoire, $alphabet));
+        }
+    }
+
+    /**
+     * Validate tests for various unlimited alphabets -- short
+     */
+    public function testValidateUnlimitedAlphabets()
+    {
+        $tests = array(
+            'fk.zdek' => 'fk00m',
+            'fa.zdewk' => 'fa000z',
+            'fa.zxik' => 'fa00z',
+            'f5.zeixwk' => 'f50000p',
+        );
+
+        foreach ($tests as $template => $first) {
+            $erc = $this->_short($template);
+            $regex = '/Size:\s*unlimited\n/';
+            $this->assertNotEmpty(preg_match($regex, $erc),
+                sprintf('Template "%s" is not unlimited.', $template));
+            # echo '4-digit random';
+
+            $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+            $contact = 'Fester Bestertester';
+
+            $id = Noid::mint($noid, $contact, '');
+            $this->assertEquals($first, $id, sprintf('First is not "%s" for template "%s".', $first, $template));
+            # echo 'mint first';
+
+            Noid::dbclose($noid);
+        }
+    }
+
     protected function _executeCommand($cmd, &$status, &$output, &$errors)
     {
         // Using proc_open() instead of exec() avoids an issue: current working

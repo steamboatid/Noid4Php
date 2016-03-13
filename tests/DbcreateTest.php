@@ -102,13 +102,13 @@ class NoidDbCreateTest extends PHPUnit_Framework_TestCase
         $this->assertNotEmpty(preg_match($regex, $result));
         # echo 'prefix vowels ok in general';
 
-        $result = $this->_short('ab.rdxdk', 'stdout');
+        $result = $this->_short('ab.rdXdk', 'stdout');
         $regex = '/parse_template: a mask may contain only the letters/';
         $this->assertNotEmpty(preg_match($regex, $result));
         # echo 'bad mask char';
 
         $result = $this->_short('ab.rdddk', 'stdout');
-        $regex = '/a mask may contain only characters from/';
+        $regex = '/' . preg_quote('a mask of type "[de]+" may contain only characters from', '/') . '/';
         $this->assertNotEmpty(preg_match($regex, $result));
         # echo 'prefix vowels not ok with check char';
     }

@@ -168,27 +168,6 @@ class Noid
      */
 
     /**
-     * Legal string should be 0123456789bcdfghjkmnpqrstvwxz
-     *
-     * @var string
-     */
-    static public $legalstring;
-
-    /**
-     * Extended digits count.
-     *
-     * @var integer
-     */
-    static public $alphacount;
-
-    /**
-     * Pure digit count.
-     *
-     * @var integer
-     */
-    static public $digitcount;
-
-    /**
      * Allows to test the locking mechanism.
      *
      * @var integer
@@ -251,31 +230,59 @@ class Noid
      */
 
     /**
-     * Extended digits array.  Maps ordinal value to ASCII character.
+     * List of possible repertoires of characters.
+     *
+     * All alphabets have a prime number of characters, except "d" (digits).
      *
      * @var array
      */
-    static protected $_xdig = array(
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-        'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'm', 'n',
-        'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'z',
+    static public $alphabets = array(
+        // Standard character repertoires.
+        'd' => '0123456789',
+        'e' => '0123456789bcdfghjkmnpqrstvwxz',
+        // Proposed character repertoires.
+        'i' => '0123456789x',
+        'x' => '0123456789abcdef_',
+        'v' => '0123456789abcdefghijklmnopqrstuvwxyz_',
+        'E' => '123456789bcdfghjkmnpqrstvwxzBCDFGHJKMNPQRSTVWXZ',
+        'w' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ#*+@_',
+        // Proposed for the "c" mask, but not accepted for Ark.
+        'c' => '!"#$&\'()*+,0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~',
+        // Not proposed in the Perl script, but compatible with Ark and useful
+        // because the longest with only alphanumeric characters:
+        // { 0-9 a-z A-Z } - { l }     cardinality 61, mask char l
+        'l' => '0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
     );
 
     /**
-     * Ordinal value hash for extended digits.  Maps ASCII characters to ordinals.
+     * Helper to set the type of check characters according to the alphabets.
+     *
+     * The order is important, because the check character is the shortest
+     * alphabet with all the characters of the prefix and the mask.
      *
      * @var array
      */
-    static protected $_ordxdig = array(
-        '0' =>  0,  '1' =>  1,  '2' =>  2,  '3' =>  3,  '4' =>  4,
-        '5' =>  5,  '6' =>  6,  '7' =>  7,  '8' =>  8,  '9' =>  9,
-
-        'b' => 10,  'c' => 11,  'd' => 12,  'f' => 13,  'g' => 14,
-        'h' => 15,  'j' => 16,  'k' => 17,  'm' => 18,  'n' => 19,
-
-        'p' => 20,  'q' => 21,  'r' => 22,  's' => 23,  't' => 24,
-        'v' => 25,  'w' => 26,  'x' => 27,  'z' => 28,
+    static protected $_alphabetChecks = array(
+        // For compatibility purpose with Perl script, the check character is
+        // "e" for masks with "d" or "e", whatever the prefix (so vowels and "l"
+        // are not allowed in the prefix when there is a check character).
+        'd' => 'e',
+        'i' => 'e',
+        'x' => 'x',
+        'e' => 'e',
+        'v' => 'v',
+        'E' => 'E',
+        'l' => 'l',
+        'w' => 'w',
+        'c' => 'c',
     );
+
+    /**
+     * Helper to check quickly the mask in various places.
+     *
+     * @var string
+     */
+    static protected $_repertoires = 'dixevElwc';
 
     public function __construct()
     {
@@ -302,11 +309,6 @@ class Noid
         if (!in_array('db4', dba_handlers())) {
             throw new Exception('Noid requires BerkeleyDB: not installed.');
         }
-
-        // Initialize some public values.
-        self::$legalstring = join('', self::$_xdig);
-        self::$alphacount = strlen(self::$legalstring);
-        self::$digitcount = 10;
 
         /**
          * Workaround to get an array of all keys matching a simple pattern.
@@ -680,14 +682,39 @@ class Noid
      * @todo ask Steve Silberstein (of III) about check digits?
      *
      * @param string $id
+     * @param string $alphabet The label used for the alphabet to check against.
+     * The alphabet must contain all characters of all repertoires used. The
+     * argument can be the repertoire itself (more than one letter, like in
+     * scope()). Default to "e" for compatibility with the Perl script, that
+     * uses only the mask "[de]+".
      * @return string|null
      */
-    static public function checkchar($id)
+    static public function checkchar($id, $alphabet = 'e')
     {
         self::init();
 
         if (strlen($id) == 0) {
             return;
+        }
+
+        if (empty($alphabet)) {
+            return;
+        }
+
+        // Check if the argument is the repertoire.
+        if (strlen($alphabet) == 1) {
+            if (!isset(self::$alphabets[$alphabet])) {
+                return;
+            }
+            $repertoire = $alphabet;
+            $alphabet = self::$alphabets[$repertoire];
+        }
+        // The argument is the alphabet itself.
+        else {
+            $repertoire = array_search($alphabet, self::$alphabets);
+            if (empty($repertoire)) {
+                return;
+            }
         }
 
         $lastchar = substr($id, -1);
@@ -696,11 +723,13 @@ class Noid
         $sum = 0;
         foreach (str_split($id) as $c) {
             # if character is null, it's ordinal value is zero
-            $sum += $pos * (isset(self::$_ordxdig[$c]) ? self::$_ordxdig[$c] : 0);
+            if (strlen($c) > 0) {
+                $sum += $pos * strpos($alphabet, $c);
+            }
             $pos++;
         }
-        $checkchar = self::$_xdig[$sum % self::$alphacount];
-        #print "RADIX=self::$alphacount, mod=", $sum % self::$alphacount, PHP_EOL;
+        $checkchar = substr($alphabet, $sum % strlen($alphabet), 1);
+        # print 'RADIX=' . strlen($alphabet) . ', mod=' . $sum % strlen($alphabet) . PHP_EOL;
         if ($lastchar === '+' || $lastchar === $checkchar) {
             return $id . $checkchar;
         }
@@ -890,7 +919,15 @@ class Noid
         dba_replace("$R/prefix", $prefix, $db);
         dba_replace("$R/mask", $mask, $db);
         dba_replace("$R/firstpart", ($naan ? $naan . '/' : '') . $prefix, $db);
-        dba_replace("$R/addcheckchar", (boolean) preg_match('/k$/', $mask), $db);    # boolean answer
+
+        $add_cc = (boolean) preg_match('/k$/', $mask);    # boolean answer
+        dba_replace("$R/addcheckchar", $add_cc, $db);
+        if ($add_cc) {
+            // The template is already checked, so no error is possible.
+            $repertoire = self::get_alphabet($template);
+            dba_replace("$R/checkrepertoire", $repertoire, $db);
+            dba_replace("$R/checkalphabet", self::$alphabets[$repertoire], $db);
+        }
 
         dba_replace("$R/generator_type", $gen_type, $db);
         dba_replace("$R/genonly", $genonly, $db);
@@ -963,8 +1000,8 @@ class Noid
             . ($term === 'long' ? 'N' : '-')
             . ($genonly && !preg_match('/-/', $prefix) ? 'I' : '-')
             . (dba_fetch("$R/addcheckchar", $db) ? 'T' : '-')
-            # yyy "E" mask test anticipates future extensions to alphabets
-            . ($genonly && (preg_match('/[aeiouy]/i', $prefix) || preg_match('/[^rszdek]/', $mask))
+            // Currently, only alphabets "d", "e" and "i" are without vowels.
+            . ($genonly && (preg_match('/[aeiouy]/i', $prefix) || preg_match('/[^rszdeik]/', $mask))
                 ? '-' : 'E')        # Elided vowels or not
         ;
         dba_replace("$R/properties", $properties, $db);
@@ -1430,17 +1467,6 @@ NAAN:      $naan
     }
 
     /**
-     * A no-op function to call instead of checkchar().
-     *
-     * @param mixed $string
-     * @param string
-     */
-    static protected function _echo($string)
-    {
-        return (string) $string;
-    }
-
-    /**
      * Fetch elements from the base.
      *
      * @todo do we need to be able to "get/fetch" with a discriminant,
@@ -1792,6 +1818,56 @@ NAAN:      $naan
             return;
         }
         return $id;
+    }
+
+    /**
+     * Helper to determine the repertoire of the check character, that is the
+     * shortest alphabet that contains all characters used in the template,
+     * prefix included.
+     *
+     * For compatibility purpose with the Perl script, the templates where the
+     * mask is "[de]+" are an exception and exclude the prefix, so the check
+     * repertoire is "e". The prefix isn't checked here but in parse_template().
+     *
+     * @param $template
+     * @return string|boolean The label of the alphabet, or true if the template
+     * doesn't require a check character, or false if error.
+     */
+    static public function get_alphabet($template)
+    {
+        # Confirm well-formedness of $mask before proceeding.
+        if (!preg_match('/^([^\.]*)\.([rsz][' . self::$_repertoires . ']+k?)$/', $template, $matches)) {
+            return false;
+        }
+        $prefix = isset($matches[1]) ? $matches[1] : '';
+        $mask = isset($matches[2]) ? $matches[2] : '';
+        if (substr($mask, -1) !== 'k') {
+            return true;
+        }
+
+        // For compatibility purpose with Perl script, only "e" is allowed for
+        // masks with "d" and "e" exclusively. The prefix is not checked here.
+        if (preg_match('/^.[de]+k$/', $mask)) {
+            return 'e';
+        }
+
+        // Get the shortest alphabet. There are some subtleties ("x" has no "x",
+        // "E has no "0"...), so a full check is needed.
+        $allCharacters = $prefix;
+        foreach (str_split(substr($mask, 1, strlen($mask) - 2)) as $c) {
+            $allCharacters .= self::$alphabets[self::$_alphabetChecks[$c]];
+        }
+        // Deduplicate characters.
+        $allCharacters = count_chars($allCharacters, 3);
+
+        // Get the smallest repertoire with all characters.
+        foreach (array_unique(self::$_alphabetChecks) as $repertoire) {
+            if (preg_match('/^[' . preg_quote(self::$alphabets[$repertoire], '/') . ']+$/', $allCharacters)) {
+                return $repertoire;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2193,7 +2269,8 @@ NAAN:      $naan
             return;
         }
 
-        if (! dba_fetch("$R/template", $db)) {
+        $template = dba_fetch("$R/template", $db);
+        if (!$template) {
             self::addmsg($noid, 'error: this minter does not generate identifiers (it does accept user-defined identifier and element bindings).');
             return;
         }
@@ -2305,6 +2382,10 @@ NAAN:      $naan
             }
         }
 
+        $repertoire = dba_fetch("$R/addcheckchar", $db)
+            ? (dba_fetch("$R/checkrepertoire", $db) ?: self::get_alphabet($template))
+            : '';
+
         # As above, the following is not a proper loop.  Normally it should
         # run once, but several cycles may be needed to weed out anomalies
         # with the generated id (eg, there's a hold on the id, or it was
@@ -2340,7 +2421,7 @@ NAAN:      $naan
             # Add check character if called for.
             #
             if (dba_fetch("$R/addcheckchar", $db)) {
-                $id = self::checkchar($id);
+                $id = self::checkchar($id, $repertoire);
             }
 
             # There may be a hold on an id, meaning that it is not to
@@ -2473,7 +2554,7 @@ NAAN:      $naan
 
         # Confirm well-formedness of $mask before proceeding.
         #
-        if (!preg_match('/^[rsz][de]+k?$/', $mask)) {
+        if (!preg_match('/^[rsz][' . self::$_repertoires . ']+k?$/', $mask)) {
             return;
         }
 
@@ -2489,11 +2570,9 @@ NAAN:      $naan
                     ) { # terminate on r or s even if
                     break;   # $num is not all used up yet
                 }
-                if ($c === 'e') {
-                    $div = self::$alphacount;
-                }
-                elseif ($c === 'd') {
-                    $div = self::$digitcount;
+                if (isset(self::$alphabets[$c])) {
+                    $alphabet = self::$alphabets[$c];
+                    $div = strlen($alphabet);
                 }
                 elseif ($c === 'z') {
                     $varwidth = 1;   # re-uses last $div value
@@ -2505,7 +2584,7 @@ NAAN:      $naan
             }
             $remainder = $num % $div;
             $num = intval($num / $div);
-            $s = self::$_xdig[$remainder] . $s;
+            $s = substr($alphabet, $remainder, 1) . $s;
         }
         if (substr($mask, -1) === 'k') {       # if it ends in a check character
             $s .= '+';      # represent it with plus in new id
@@ -2554,6 +2633,11 @@ NAAN:      $naan
             $prefix = $mask = $gen_type = '';
             return self::NOLIMIT;
         }
+        if (strpos($template, '.') === false) {
+            $msg = 'parse_template: a template requires a "." to separate the prefix and the mask.'
+                . " - can't generate identifiers.";
+            return 0;
+        }
         if (!preg_match('/^([^\.]*)\.(\w+)/', $template, $matches)) {
             $msg = "parse_template: no template mask - can't generate identifiers.";
             return 0;
@@ -2572,20 +2656,34 @@ NAAN:      $naan
             return 0;
         }
 
-        if (!preg_match('/^.[de]+k?$/', $mask)) {
-            $msg = 'parse_template: a mask may contain only the letters "d" or "e".';
+        if (!preg_match('/^.[' . self::$_repertoires . ']+k?$/', $mask)) {
+            $msg = sprintf('parse_template: a mask may contain only the letters "%s".',
+                implode('", "', array_keys(self::$alphabets)));
             return 0;
         }
 
         # Check prefix for errors.
         #
         $has_cc = substr($mask, -1) === 'k';
-        foreach (str_split($prefix) as $c) {
-            // strlen() avoid an issue with str_split() when there is no prefix.
-            if (strlen($c) && $has_cc && $c !== '/' && ! isset(self::$_ordxdig[$c])) {
-                $msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
-                    self::$legalstring);
+        if ($has_cc) {
+            $repertoire = self::get_alphabet($template);
+            if (empty($repertoire)) {
+                $msg = sprintf('parse_template: the check character cannot be determined.');
                 return 0;
+            }
+
+            if ($repertoire !== true) {
+                $alphabet = self::$alphabets[$repertoire];
+                foreach (str_split($prefix) as $c) {
+                    // strlen() avoid an issue with str_split() when there is no prefix.
+                    if (strlen($c) && $c !== '/' && strpos($alphabet, $c) === false) {
+                        // By construction, only "[de]+" templates can set an
+                        // error here.
+                        $msg = sprintf('parse_template: with a check character at the end, a mask of type "[de]+" may contain only characters from "%s".',
+                            self::$alphabets['e']);
+                        return 0;
+                    }
+                }
             }
         }
 
@@ -2612,12 +2710,9 @@ NAAN:      $naan
             if (strlen($c) == 0) {
                 break;
             }
-            # Mask chars it could be are: d e k
-            if ($c === 'e') {
-                $total *= self::$alphacount;
-            }
-            elseif ($c === 'd') {
-                $total *= self::$digitcount;
+            # Mask chars it could be are: repertoires or k
+            if (isset(self::$alphabets[$c])) {
+                $total *= strlen(self::$alphabets[$c]);
             }
             elseif (preg_match('/[krsz]/', $c)) {
                 continue;
@@ -2917,9 +3012,14 @@ NAAN:      $naan
         $mask = dba_fetch("$R/mask", $db);
         $firstpart = dba_fetch("$R/firstpart", $db);
         $result = $firstpart . self::n2xdig($num, $mask);
-        return dba_fetch("$R/addcheckchar", $db)
-            ? self::checkchar($result)
-            : $result;
+
+        if (dba_fetch("$R/addcheckchar", $db)) {
+            $template = dba_fetch("$R/template", $db);
+            $repertoire = self::get_alphabet($template);
+            return self::checkchar($result, $repertoire);
+        }
+
+        return $result;
     }
 
     /**
@@ -2934,7 +3034,8 @@ NAAN:      $naan
 
         $R = &self::$_R;
 
-        if (!dba_fetch("$R/template", $db)) {
+        $template = dba_fetch("$R/template", $db);
+        if (!$template) {
             print 'This minter does not generate identifiers, but it does accept user-defined identifier and element bindings.' . PHP_EOL;
         }
         $total = dba_fetch("$R/total", $db);
@@ -2949,7 +3050,7 @@ NAAN:      $naan
         $gen_type = dba_fetch("$R/generator_type", $db);
 
         print sprintf('Template %s will yield %s %s unique ids',
-            dba_fetch("$R/template", $db), $total < 0 ? 'an unbounded number of' : $totalstr, $gen_type) . PHP_EOL;
+            $template, $total < 0 ? 'an unbounded number of' : $totalstr, $gen_type) . PHP_EOL;
         $tminus1 = $total < 0 ? 987654321 : $total - 1;
 
         # See if we need to compute a check character.
@@ -2963,7 +3064,7 @@ NAAN:      $naan
         foreach ($results as $n => &$xdig) {
             $xdig = $naan . self::n2xdig($n, $mask);
             if (dba_fetch("$R/addcheckchar", $db)) {
-                $xdig = self::checkchar($result);
+                $xdig = self::checkchar($result, $prefix . '.' . $mask);
             }
         }
         unset($xdig);
@@ -3049,9 +3150,9 @@ NAAN:      $naan
             return array();
         }
 
+        $repertoire = null;
+
         if ($template === '-') {
-            $prefix = dba_fetch("$R/prefix", $db);
-            $mask = dba_fetch("$R/mask", $db);
             # $retvals[] = sprintf('template: %s', dba_fetch("$R/template", $db)));
             if (! dba_fetch("$R/template", $db)) {  # do blanket validation
                 $nonulls = array_filter(preg_replace('/^(.)/', 'id: $1', $ids));
@@ -3061,6 +3162,12 @@ NAAN:      $naan
                 $retvals += $nonulls;
                 return $retvals;
             }
+            $prefix = dba_fetch("$R/prefix", $db);
+            $mask = dba_fetch("$R/mask", $db);
+            // Validate with the saved repertoire, if any.
+            $repertoire = dba_fetch("$R/addcheckchar", $db)
+                ? (dba_fetch("$R/checkrepertoire", $db) ?: self::get_alphabet($template))
+                : '';
         }
         elseif (! self::parse_template($template, $prefix, $mask, $gen_type, $msg)) {
             self::addmsg($noid, sprintf('error: template %s bad: %s', $template, $msg));
@@ -3069,6 +3176,10 @@ NAAN:      $naan
 
         $m = preg_replace('/k$/', '', $mask);
         $should_have_checkchar = $m !== $mask;
+        if (is_null($repertoire)) {
+            $repertoire = $should_have_checkchar ? self::get_alphabet($prefix . '.' . $mask) : '';
+        }
+
         $naan = dba_fetch("$R/naan", $db);
         foreach ($ids as $id) {
             if (is_null($id) || trim($id) == '') {
@@ -3099,9 +3210,7 @@ NAAN:      $naan
                 $retvals[] = sprintf('iderr: %s should begin with %s.', $id, $first);
                 continue;
             }
-            # yyy this checkchar algorithm will need an arg when we
-            #     expand into other alphabets
-            if ($should_have_checkchar && ! self::checkchar($id)) {
+            if ($should_have_checkchar && ! self::checkchar($id, $repertoire)) {
                 $retvals[] = sprintf('iderr: %s has a check character error', $id);
                 continue;
             }
@@ -3135,15 +3244,9 @@ NAAN:      $naan
                     }
                     $m = $suppl;
                 }
-                if ($m === 'e' && strpos(self::$legalstring, $c) === false) {
-                    $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (extended digit)',
-                        $id, $c, $template, $m);
-                    $flagBreakContinue = true;
-                    break;
-                }
-                elseif ($m === 'd' && strpos('0123456789', $c) === false) {
-                    $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (digit)',
-                         $id, $c, $template, $m);
+                if (isset(self::$alphabets[$m]) && strpos(self::$alphabets[$m], $c) === false) {
+                    $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s"%s',
+                        $id, $c, $template, $m, $m == 'e' ? ' (extended digit)' : ($m == 'd' ? ' (digit)' : ''));
                     $flagBreakContinue = true;
                     break;
                 }       # or $m === 'k', in which case skip
@@ -3189,10 +3292,20 @@ Noid - routines to mint and manage nice opaque identifiers
 
  Noid::dbclose( $noid );		     # close minter when done
 
- Noid::checkchar( $id );      # if id ends in +, replace with new check
+ Noid::checkchar( $id, $alphabet ); # if id ends in +, replace with new check
  			      # char and return full id, else return id
 			      # if current check char valid, else return
 			      # 'undef'
+			      # The alphabet is the label of the character
+			      # repertoire (or the repertoire itself) used
+			      # for the check character.
+			      # Default is "e" for legal extended digits.
+
+ Noid::get_alphabet( $template ); # Return the mask of the alphabet
+			# that matches all characters contained in the
+			# template. For compatibility purpose, the check
+			# character is "e" for masks with "d" or "e"
+			# exclusively, whatever the prefix.
 
  Noid::validate( $noid,	      # check that ids conform to template ("-"
  		$template,    # means use minter's template); returns
