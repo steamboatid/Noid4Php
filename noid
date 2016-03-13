@@ -65,9 +65,6 @@ $template = null;
 $snaa = null;
 $total = null;
 
-$valid_helptopics = array();
-$info = array(); # purposely undefined for now
-
 # yyy make a noidmail (email robot interface?)
 # yyy location field for redirect should include a discriminant
 #     eg, ^c for client choice, ^i for ipaddr, ^f format, ^l language
@@ -282,6 +279,26 @@ class NoidDo
         'mint', 'note', 'peppermint', 'queue', 'validate',
     );
 
+    /**
+     * List of valid help topics.
+     *
+     * The valid commands are added when needed.
+     *
+     * @var array
+     */
+    protected $_valid_helptopics = array(
+        'intro', 'all', 'templates',
+    );
+
+    /**
+     * Content of help topics.
+     *
+     * @internal purposely empty for now: filled only when needed (usage).
+     *
+     * @var array
+     */
+    protected $_info;
+
     public function command($args = array())
     {
         global $stderr;
@@ -320,8 +337,8 @@ class NoidDo
         # It should now be safe to turn off strict 'refs' when we
         # invoke a command via its subroutine name.
         # if (count($args) <= 1) {
-        #     usage(1);    # yyy say something senstive about $command
-        #     usage(1, 1, 'intro');
+        #     $this->usage(1);    # yyy say something senstive about $command
+        #     $this->usage(1, 1, 'intro');
         #     return 0;
         # }
 
@@ -396,7 +413,7 @@ class NoidDo
                     $how, $id, $elem, $value);
                 if (! defined($report)) {
                     fwrite($stderr, $report . PHP_EOL);
-                    usage(1, 1, 'bind');
+                    $this->usage(1, 1, 'bind');
                     # yyy how/who should log failures in "hard" case
                 }
                 else {
@@ -494,7 +511,7 @@ class NoidDo
         $report = Noid::bind($noid, $contact, $validate, $how, $id, $elem, $value);
         if (! defined($report)) {
             fwrite($stderr, Noid::errmsg($noid));
-            usage(0, 1, 'bind');
+            $this->usage(0, 1, 'bind');
         }
         else {
             print($report . PHP_EOL);
@@ -615,13 +632,13 @@ class NoidDo
      * Return help about a command.
      *
      * @param string $topic
-     * @return string
+     * @return integer 1
      */
-    public function help($topic)
+    public function help($topic = '')
     {
-        my $in_error = 0;
-        my $brief = 0;
-        return(usage($in_error, $brief, $topic));
+        $in_error = 0;
+        $brief = 0;
+        return $this->usage($in_error, $brief, $topic);
     }
 
     # yyy what about a "winnow" routine that is either started
@@ -648,7 +665,7 @@ class NoidDo
         }
         if (! Noid::hold($noid, $contact, $on_off, @ids)) {
             fwrite($stderr, Noid::errmsg($noid));
-            usage(1, 1, 'hold');
+            $this->usage(1, 1, 'hold');
             Noid::dbclose($noid);
             return 0;
         }
@@ -691,7 +708,7 @@ class NoidDo
         if (! defined($n) || $n !~ /^\d+$/) {
             fwrite($stderr, sprintf('Argument error: expected positive integer, got %s',
                 defined($n) ? $n : 'nothing') . PHP_EOL);
-            usage(1, 1, 'mint');
+            $this->usage(1, 1, 'mint');
             return 0;
         }
         my $noid = Noid::dbopen($dbname, 0);
@@ -727,7 +744,7 @@ class NoidDo
         if (! defined($key) || ! defined($value)) {
             fwrite($stderr,
                 'You must supply a key and a value.' . PHP_EOL);
-            usage(1, 1, 'note');
+            $this->usage(1, 1, 'note');
             return 0;
         }
         my $noid = Noid::dbopen($dbname, 0);
@@ -789,7 +806,7 @@ class NoidDo
         if (empty($valids)) {
             fwrite($stderr, Noid::errmsg($noid));
             Noid::dbclose($noid);
-            usage(1, 1, 'validate');
+            $this->usage(1, 1, 'validate');
             return 0;
         }
 
@@ -805,68 +822,80 @@ class NoidDo
      * First arg must be a filehandle.
      *
      * @param handle $out
-     * @param array $args
-     * @return string
+     * @param string|array $args
+     * @return integer|boolean False if error.
      */
     protected function _bprint($out, $args)
     {
-        map {s/\n/\n /g} @args;
-        return print $out @args;
+        $string = is_array($args) ? implode('', $args) : $args;
+        $string = str_replace(PHP_EOL, PHP_EOL . ' ', $string);
+        return fwrite($out, $string);
     }
 
     /**
      * Print a message about a topic.
      *
      * @param integer $in_error
-     * @param string $brief
+     * @param integer $brief
      * @param string $topic
      * @return integer Always returns 1 so it can be used in boolean blocks.
      */
-    public function usage($in_error, $brief, $topic)
+    public function usage($in_error = null, $brief = null, $topic = null)
     {
         global $stderr;
+        $info = &$this->_info;
 
-        ! defined($in_error) and
-            $in_error = 1;        # default is to treat as error
-        $in_error and
-            $| = 1;            # flush any pending output
-        my $out =            # where to send output
-            $in_error ? $stderr : STDOUT;
-        ! defined($brief) and
-            $brief = 1;        # default is to be brief
-        $topic ||= 'intro';
-        $topic = lc($topic);
+        if (is_null($in_error)) {
+            $in_error = 1; # default is to treat as error
+        }
+        if ($in_error) {
+            flush(); # flush any pending output
+        }
+        # where to send output
+        $out = $in_error ? $stderr : STDOUT;
+        # default is to be brief
+        if (is_null($brief)) {
+            $brief = 1;
+        }
+        $topic = $topic ?: 'intro';
+        $topic = strtolower($topic);
 
         # Initialize info topics if need be.
         #
-        ! @valid_helptopics and
-            init_help();
-        my @blurbs = grep(/^$topic/, @valid_helptopics);
-        if (scalar(@blurbs) != 1) {
-            $msg = scalar(@blurbs) < 1
+        if (empty($info)) {
+            $this->_init_help();
+        }
+
+        $blurbs = array_filter(
+            $this->_valid_helptopics,
+            function ($v) use ($topic) { return strpos($v, $topic) === 0; });
+        $blurbs = array_intersect($this->_valid_helptopics, $blurbs);
+        if (count($blurbs) != 1) {
+            $msg = count($blurbs) < 1
                 ? sprintf('Sorry: nothing under "%s".', $topic)
                 : sprintf("Help: Your request (%s), matches more than one topic: \n\t(%s).",
                     $topic, join(', ', $blurbs));
             fwrite($out, $msg . PHP_EOL . ' You might try one of these topics:');
-            my @topics = @valid_helptopics;
-            my $n = 0;
-            my $topics_per_line = 8;
-            while (1) {
-                ! @topics and
-                    print PHP_EOL,
-                    last
-                or
-                $n++ % $topics_per_line == 0 and
-                    print(PHP_EOL . "\t")
-                or
-                    print(' ', shift(@topics))
-                ;
+            $topics = $this->_valid_helptopics;
+            $n = 0;
+            $topics_per_line = 8;
+            while (true) {
+                if (empty($topics)) {
+                    print PHP_EOL;
+                    break;
+                }
+                if ($n++ % $topics_per_line == 0) {
+                    print(PHP_EOL . "\t");
+                }
+                else {
+                    print(' ' . array_shift($topics));
+                }
             }
             print PHP_EOL . PHP_EOL;
             return 1;
         }
         # If we get here, @blurbs names one story.
-        my $blurb = shift @blurbs;
+        $blurb = array_shift($blurbs);
 
         # Big if-elsif clause to switch on requested topic.
         #
@@ -877,49 +906,58 @@ class NoidDo
         # every newline.  The end of the output should end the ANVL record,
         # so we print "\n\n" at the end.
         #
-        my ($t, $i);
-        if ($blurb eq 'intro') {
-            bprint $out,
-qq@Usage:
-            noid [-f Dbdir] [-v] [-h] Command Arguments@, ($brief ? qq@
-            noid -h             (for help with a Command summary).@
-    : qq@
+        if ($blurb == 'intro') {
+            $msg = 'Usage:
+              noid [-f Dbdir] [-v] [-h] Command Arguments';
+            if ($brief) {
+                $msg .= '
+              noid -h             (for help with a Command summary).';
+                $this->_bprint($out, $msg);
+                print(PHP_EOL . PHP_EOL);
+                return 1;
+            }
+            $msg .= '
 
 Dbdir defaults to "." if not found from -f or a NOID environment variable.
 For more information try "perldoc noid" or "noid help Command".  Summary:
-@);
-            $brief and
-                print(PHP_EOL . PHP_EOL),
-                return 1;
-            for $t (@valid_commands) {
-                $i = $info{"$t/brief"};
-                ! defined($i) || ! $i and
-                    next;
-                bprint $out, $i;
+';
+            $this->_bprint($out, $msg);
+            foreach ($this->_valid_commands as $t) {
+                $i = $t . '/brief';
+                if (!empty($info[$i])) {
+                    $this->_bprint($out, $info[$i]);
+                }
             }
-    bprint $out, qq@
+            $msg = <<<'EOD'
+
 If invoked as "noidu...", output is formatted for a web client.  Give Command
-as "-" to run a block of noid Commands read from stdin or from POST data.@;
+as "-" to run a block of noid Commands read from stdin or from POST data.
+EOD;
+            $this->_bprint($out, $msg);
             print PHP_EOL . PHP_EOL;
             return 1;
         }
-        #elsif $blurb eq "dbcreate" and print $out $info{$blurb}
-        #or
-        #$blurb eq "bind" and print $out
-        $brief and
+        #elseif ($blurb == 'dbcreate') {
+        #    fwrite($out, $info[$blurb]);
+        #}
+        #elseif ($blurb == 'bind') {
+        #    fwrite($out, $info[$blurb]);
+        #}
+        if ($brief) {
             $blurb .= '/brief';
-        $t = $info{$blurb};
-        if (! defined($t) || ! $t) {
+        }
+        if (empty($info[$blurb])) {
             fwrite($out, sprintf('Sorry: no information on "%s".', $blurb) . PHP_EOL . PHP_EOL);
             return 1;
         }
-        bprint $out, $t;
+        $this->_bprint($out, $info[$blurb]);
         print PHP_EOL;
         return 1;
 
         # yyy fix these verbose messages
 
-        my $yyyy = qq@
+        $yyyy = <<<'EOD'
+
 Called as "noid", an id generator accompanies every COMMAND.  Called as
 "noi", the id generator is supplied implicitly by looking first for a
 NOID environment variable and, failing that, for a file calld ".noid" in
@@ -958,7 +996,8 @@ Alternatively, if the mask contains an 's' (and no other letters), dbcreate
 initializes a generator of sequential numbers.  Instead of seemingly random
 creates sequentially generated number.  Use '0s'
 to indicate a constant width number padded on the left with zeroes.
-@;
+
+EOD;
         return 1;
     }
 
@@ -969,38 +1008,35 @@ to indicate a constant width number padded on the left with zeroes.
      */
     protected function _init_help()
     {
+        $info = &$this->_info;
+
         # For convenient maintenance, we store individual topics in separate
         # array elements.  So as not to slow down script start up, we don't
         # pre-load anything.  In this way only the requester of help info,
         # who does not need speed for this purpose, pays for it.
         #
-        @valid_helptopics = qw(
-            intro all templates
-        );
-        push(@valid_helptopics, @valid_commands);
-        %info = (
-        'bind/brief' =>
-q@
+        $this->_valid_helptopics += $this->_valid_commands;
+        $info = array();
+        $info['bind/brief'] = <<<'EOD'
+
    noid bind How Id Element Value	# to bind an Id's Element, where
       How is set|add|insert|new|replace|mint|append|prepend|delete|purge.
       Use an Id of :idmap/Idpattern, Value=PerlReplacementPattern so that
       fetch returns variable values.  Use ":" as Element to read Elements
       and Values up to a blank line from stdin (up to EOF with ":-").
-@,
-        'bind' =>
-q@@,
-        'dbinfo/brief' =>
-q@@,
-        'dbinfo' =>
-q@@,
-        'dbcreate/brief' =>
-q@
+
+EOD;
+        $info['bind'] = '';
+        $info['dbinfo/brief'] = '';
+        $info['dbinfo'] = '';
+        $info['dbcreate/brief'] = <<<'EOD'
+
    noid dbcreate [ Template (long|-|short) [ NAAN NAA SubNAA ] ]
       where Template=prefix.Tmask, T=(r|s|z), and mask=string of (e|d|k)
-@,
 
-        'dbcreate' =>
-q|
+EOD;
+        $info['dbcreate'] = <<<'EOD'
+
 To create an identifier minter governed by Template and Term ("long" or "-"),
 
    noid dbcreate [ Template Term [ NAAN NAA SubNAA ] ]
@@ -1022,76 +1058,71 @@ example, the NAAN, 13030, corresponds to the NAA, "cdlib.org".  The SubNAA
 is also a character string, but it is a locally determined and possibly
 structured subauthority string (e.g., "oac", "ucb/dpg", "practice_area") that
 is not globally registered.
-|,
-        'fetch/brief' =>
-q@
+
+EOD;
+        $info['fetch/brief'] = <<<'EOD'
+
    noid fetch Id Element ...		# fetch/map one or more Elements
-@,
-        'fetch' =>
-q@
+
+EOD;
+        $info['fetch'] = <<<'EOD'
+
 To bind,
 
    noid bind replace fk0wqkb myGoto http://www.cdlib.org/foobar.html
 
 sets "myGoto" element of identifier "fk0wqkb" to a string (here a URL).
-@,
-        'get/brief' =>
-q@
+
+EOD;
+        $info['get/brief'] = <<<'EOD'
+
    noid get Id Element ...		# fetch/map Elements without labels
-@,
-        'get' =>
-q@@,
-        'hello/brief' =>
-q@@,
-        'hello' =>
-q@@,
-        'hold/brief' =>
-q@
+
+EOD;
+        $info['get'] = '';
+        $info['hello/brief'] = '';
+        $info['hello'] = '';
+        $info['hold/brief'] = <<<'EOD'
+
    noid hold (set|release) Id ...	# place or remove a "hold" on Id(s)
-@,
-        'hold' =>
-q@@,
-        'mint/brief' =>
-q@
+
+EOD;
+        $info['hold'] = '';
+        $info['mint/brief'] = <<<'EOD'
+
    noid mint N [ Elem Value ]	# to mint N identifiers (optionally binding)
-@,
-        'mint' =>
-q@@,
-        'note/brief' =>
-q@@,
-        'note' =>
-q@@,
-        'peppermint/brief' =>
-q@@,
-        'peppermint' =>
-q@@,
-        'queue/brief' =>
-q@
+
+EOD;
+        $info['mint'] = '';
+        $info['note/brief'] = '';
+        $info['note'] = '';
+        $info['peppermint/brief'] = '';
+        $info['peppermint'] = '';
+        $info['queue/brief'] = <<<'EOD'
+
    noid queue (now|first|lvf|Time) Id ...	# queue (eg, recycle) Id(s)
       Time is NU, meaning N units, where U= d(ays) | s(econds).
       With "lvf" (Lowest Value First) lowest value of id will mint first.
-@,
-        'queue' =>
-q@@,
 
-        'validate/brief' =>
-q@
+EOD;
+        $info['queue'] = '';
+        $info['validate/brief'] = <<<'EOD'
+
    noid validate Template Id ...	# to check if Ids are valid
       Use Template of "-" to use the minter's native template.
-@,
-        'validate' =>
-q@@,
-        );
+
+EOD;
+        $info['validate'] = '';
         return 1;
     }
 
     /**
      * Return info about user running noid.
      *
-     * @param string $web
+     * @param integer $web
      * @return string
      */
-    public function who_are_you($web)
+    public function who_are_you($web = 0)
     {
         $user = null;
         if ($web) {
