@@ -74,11 +74,17 @@ class Noid
     const DB_RDONLY = 'r';
     const DB_WRITE = 'w';
 
+    // To be able to fetch by range, unavailable via the extension "dba".
+    const DB_RANGE_PARTIAL = 'partial';
+    const DB_RANGE_REGEX = 'regex';
+
     // For compatibility purpose with the perl script.  All other constants are
     // internal. They are used only with dbopen().
     const BDB_CREATE = 1;
     const BDB_RDONLY = 1024;
     const BDB_WRITE = 0;
+    // To be able to fetch by range, unavailable via the extension "dba".
+    // const BDB_SET_RANGE = 27;
 
     /**
      * The database must hold nearly arbitrary user-level identifiers
@@ -240,6 +246,46 @@ class Noid
         $this->legalstring = join('', $this->_xdig);
         $this->alphacount = strlen($this->legalstring);
         $this->digitcount = 10;
+
+
+        /**
+         * Workaround to get an array of all keys matching a simple pattern.
+         *
+         * @internal The default extension "dba" doesn't allow to get range of keys.
+         * This workaround may be slow on big bases and may need a lot of memory.
+         * @todo Build a partial temporary base to avoid memory out for big bases.
+         *
+         * @param resource $noid
+         * @param string $pattern The pattern of the keys to retrieve (no regex).
+         * @return array Ordered associative array of matching keys and values.
+         */
+        function _dba_fetch_range($pattern, $noid)
+        {
+            if (is_null($pattern) || !is_resource($noid)) {
+                return;
+            }
+            $results = array();
+            $key = dba_firstkey($noid);
+
+            // Normalize and manage empty pattern.
+            $pattern = (string) $pattern;
+            if (strlen($pattern) == 0) {
+                while ($key !== false) {
+                    $results[$key] = dba_fetch($key, $noid);
+                    $key = dba_nextkey($noid);
+                }
+            }
+            // Manage partial pattern.
+            else {
+                while ($key !== false) {
+                    if (strpos($key, $pattern) === 0) {
+                        $results[$key] = dba_fetch($key, $noid);
+                    }
+                    $key = dba_nextkey($noid);
+                }
+            }
+            return ksort($results);
+        }
     }
 
     /**
@@ -551,43 +597,24 @@ class Noid
 
         $retvals = array();
         $db = $this->_opendbtab["bdb/$noid"];
-        $cursor = $db->db_cursor();
 
         # yyy right now "$id\t" defines how we bind stuff to an id, but in the
         #     future that could change.  in particular we don't bind (now)
         #     anything to just "$id" (without a tab after it)
-        $first = $id . "\t";
-        $skip = 0;
-        $done = 0;
-        $key = $first;
-        $value = 0;
-        $status = $cursor->c_get($key, $value, DB_SET_RANGE);
-        if ($status == 0) {
-            $skip = preg_match("|^$first$R/|", $key);
-            $done = !preg_match("|^$first|", $key);
-        }
-        else {
-            $done = 1;
-        }
-
-        while (! $done) {
-            if (! $skip && $verbose) {
-                # if $verbose (ie, fetch), include label and
-                # remember to strip "Id\t" from front of $key
-                $key = preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key;
-                $retvals[] = $key . ': ' . sprintf('clearing %d bytes', strlen($value));
-                dba_delete($key, $noid);
-            }
-
-            $status = $cursor->c_get($key, $value, DB_NEXT);
-            if ($status != 0 || !preg_match("/^$first/", $key)) {
-                $done = 1;   # no more elements under id
-            }
-            else {
+        $first = "$id\t";
+        $values = _dba_fetch_range($first, $noid);
+        if ($values) {
+            foreach ($values as $key => $value) {
                 $skip = preg_match("|^$first$R/|", $key);
+                if (!$skip && $verbose) {
+                    # if $verbose (ie, fetch), include label and
+                    # remember to strip "Id\t" from front of $key
+                    $key = preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key;
+                    $retvals[] = $key . ': ' . sprintf('clearing %d bytes', strlen($value));
+                    dba_delete($key, $noid);
+                }
             }
         }
-        unset($cursor);
         return $verbose ? $retvals : array();
     }
 
@@ -926,61 +953,41 @@ NAAN:      $naan
         $R = &$this->_R;
 
         $db = $this->_opendbtab["bdb/$noid"];
-        // Reset the cursor.
-        $key = dba_firstkey($db);
-        $key = "$R/";
-        $value = 0;
+
+        $values = _dba_fetch_range("$R/", $noid);
+        if (empty($values)) {
+            $this->addmsg($noid, sprintf('No values returned by the database.'));
+            return 0;
+        }
 
         if ($level === 'dump') {
-            while ($key != false) {
-                $value = dba_fetch($key, $db);
+            foreach ($values as $key => $value) {
                 print $key . ': ' . $value . PHP_EOL;
-                $key = dba_nextkey($db);
             }
             return 1;
         }
 
-        // TODO No "set range" for php.
-        $status = $cursor->c_get($key, $value, DB_SET_RANGE);
-        if ($status) {
-            $error = error_get_last();
-            $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $error['message']));
-            return 0;
-        }
-
-        $key = dba_nextkey($db);
-        if (strpos($key, "$R/$R") === 0) {
+        $userValues = _dba_fetch_range("$R/$R", $noid);
+        if ($userValues) {
             print 'User Assigned Values' . PHP_EOL;
-            print "  $key: $value" . PHP_EOL;
-            while ($key != false) {
-                if (strpos($key, "$R/$R") !== 0) {
-                    break;
-                }
-                $value = dba_fetch($key, $db);
+            foreach ($userValues as $key => $value) {
                 print '  ' . $key . ': ' . $value . PHP_EOL;
-                $key = dba_nextkey($db);
             }
             print PHP_EOL;
         }
 
         print 'Admin Values' . PHP_EOL;
-        print "  $key: $value" . PHP_EOL;
-        while ($key != false) {
-            if (strpos($key, "$R/") !== 0) {
-                break;
-            }
+        foreach ($values as $key => $value) {
             if ($level === 'full'
                     || !preg_match("|^$R/c\d|", $key)
                     && strpos($key, "$R/saclist") !== 0
                     && strpos($key, "$R/recycle/") !== 0
                 ) {
-                $value = dba_fetch($key, $db);
                 print '  ' . $key . ': ' . $value . PHP_EOL;
-                $key = dba_nextkey($db);
             }
         }
         print PHP_EOL;
-        // unset($cursor);
+
         return 1;
     }
 
@@ -1252,7 +1259,7 @@ NAAN:      $naan
     }
 
     /**
-     * Fetchs.
+     * Fetch elements from the base.
      *
      * @todo do we need to be able to "get/fetch" with a discriminant,
      *       eg, for smart multiple resolution??
@@ -1261,7 +1268,7 @@ NAAN:      $naan
      * @param integer $verbose is 1 if we want labels, 0 if we don't
      * @param string $id
      * @param array $elems
-     * @return string
+     * @return string List of elements separated by an end of line.
      */
     public function fetch($noid, $verbose, $id, $elems)
     {
@@ -1281,47 +1288,25 @@ NAAN:      $naan
                 . 'Circ:  ' . (dba_fetch("$id\t$R/c", $noid) ?: 'uncirculated') . PHP_EOL;
         }
 
-        $db = $this->_opendbtab["bdb/$noid"];
-        $key = dba_firstkey($db);
-
         if (empty($elems)) {  # No elements were specified, so find them.
-            $first = $id . "\t";
-            $skip = 0;
-            $done = 0;
-            $key = $first;
-            $value = 0;
-            // $status = $cursor->c_get($key, $value, DB_SET_RANGE);
-            $value = dba_fetch($key, $noid);
-            if ($status == 0) {
-                $skip = strpos($key, "$first$R/") === 0;
-                $done = strpos($key, $first) !== 0;
-            }
-            else {
-                $done = 1;
-            }
-
-            while (! $done) {
-                if (! $skip) {
-                    # if $verbose (ie, fetch), include label and
-                    # remember to strip "Id\t" from front of $key
-                    if ($verbose) {
-                        $retval .= (preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key) . ': ';
+            $db = $this->_opendbtab["bdb/$noid"];
+            $first = "$id\t";
+            $values = _dba_fetch_range($first, $noid);
+            if ($values) {
+                foreach ($values as $key => $value) {
+                    $skip = preg_match("|^$first$R/|", $key);
+                    if (!$skip) {
+                        # if $verbose (ie, fetch), include label and
+                        # remember to strip "Id\t" from front of $key
+                        if ($verbose) {
+                            $retval .= (preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key) . ': ';
+                        }
+                        $retval .= $value . PHP_EOL;
                     }
-                    $retval .= $value . PHP_EOL;
-                }
-                // $status = $cursor->c_get($key, $value, DB_NEXT);
-                $value = dba_fetch($key, $noid);
-                $key = dba_nextkey($noid);
-                if ($status != 0 || strpos($key, $first) !== 0) {
-                    $done = 1;   # no more elements under id
-                }
-                else {
-                    $skip = strpos($key, "$first$R/") === 0;
                 }
             }
-            unset($cursor);
 
-            if (! $retval) {
+            if (empty($retval)) {
                 $this->addmsg($noid, $hdr
                     . "note: no elements bound under $id.");
                 return;
@@ -1340,7 +1325,7 @@ NAAN:      $naan
                 $retval .= dba_fetch("$id\t$elem", $noid) . PHP_EOL;
             }
             else {
-                $idmapped = $this->_id2elemval($cursor, $verbose, $id, $elem);
+                $idmapped = $this->_id2elemval($verbose, $id, $elem);
                 if ($verbose) {
                     $retval .= $idmapped
                             ? $dmapped . PHP_EOL . 'note: previous result produced by :idmap'
@@ -1352,7 +1337,7 @@ NAAN:      $naan
                 }
             }
         }
-        unset($cursor);
+
         return $hdr . $retval;
     }
 
@@ -1766,33 +1751,31 @@ NAAN:      $naan
     /**
      * Return $elem: $val or error string.
      *
-     * @param integer $cursor
      * @param string $verbose
      * @param string id
      * @param string $elem
      * @return string
      */
-    protected function _id2elemval($cursor, $verbose, $id, $elem)
+    protected function _id2elemval($verbose, $id, $elem)
     {
         $R = &$this->_R;
 
         $first = "$R/idmap/$elem\t";
-        $key = $first;
-        $value = 0;
-        $status = $cursor->c_get($key, $value, DB_SET_RANGE);
-        if ($status) {
-            $error = error_get_last();
-            return sprintf('error: id2elemval: c_get status/errno (%s/%s)', $status, $error['message']);
+        $values = _dba_fetch_range($first, $noid);
+        if (is_null($values)) {
+            return sprintf('error: id2elemval: access to database failed.');
         }
+        if (empty($values)) {
+            return '';
+        }
+        $key = key($values);
         if (strpos($key, $first) !== 0) {
             return '';
         }
-        $pattern = null;
-        $newval = null;
-        while (true) { # exhaustively visit all patterns for this element
+        foreach ($values as $key => $value) {
             $pattern = preg_match("|$first(.+)|", $key) ? $key : null;
             $newval = $id;
-            if (!is_null($pattern)) {
+            if (!empty($pattern)) {
                 try {
                     # yyy kludgy use of unlikely delimiters (ascii 05: Enquiry)
                     $newval = preg_replace(chr(5) . $pattern . chr(5), $value, $newval);
@@ -1802,13 +1785,8 @@ NAAN:      $naan
                 # replaced, so return
                 return ($verbose ? $elem . ': ' : '') . $newval;
             }
-            if ($cursor->c_get($key, $value, DB_NEXT) != 0) {
-                return '';
-            }
-            if (strpos($key, $first) !== 0) {       # no match and ran out of rules
-                return '';
-            }
         }
+        return '';
     }
 
     /**
@@ -1908,11 +1886,6 @@ NAAN:      $naan
         $currdate = $this->_temper();        # fyi, 14 digits long
         $first = "$R/q/";
         $db = $this->_opendbtab["bdb/$noid"];
-        $cursor = $db->db_cursor();
-        if (empty($cursor)) {
-            $this->addmsg($noid, "couldn't create cursor");
-            return;
-        }
 
         # The following is not a proper loop.  Normally it should run once,
         # but several cycles may be needed to weed out anomalies with the id
@@ -1920,19 +1893,8 @@ NAAN:      $naan
         # to mint from the queue, the last line in the loop exits the routine.
         # If we drop out of the loop, it's because the queue wasn't ripe.
         #
-        $id = null;
-        $status = null;
-        $key = null;
-        $qdate = null;
-        $circ_svec = null;
-        while (true) {
-            $key = $first;
-            $status = $cursor->c_get($key, $id, DB_SET_RANGE);
-            if ($status) {
-                $error = error_get_last();
-                $this->addmsg($noid, sprintf('mint: c_get status/errno (%s/%s)', $status, $error['message']));
-                return;
-            }
+        $values = _dba_fetch_range($first, $noid);
+        foreach ($values as $key => $value) {
             # The cursor, key and value are now set at the first item
             # whose key is greater than or equal to $first.  If the
             # queue was empty, there should be no items under "$R/q/".
@@ -1954,7 +1916,7 @@ NAAN:      $naan
             # Any "next" statement from now on in this loop discards the
             # queue element.
             #
-            $db->db_del($key);
+            dba_delete($key, $noid);
             dba_replace("$R/queued", dba_fetch("$R/queued", $noid) - 1, $noid);
             if (dba_fetch("$R/queued", $noid) <= 0) {
                 $m = sprintf('error: queued count (%s) going negative on id %s', dba_fetch("$R/queued", $noid), $id);
