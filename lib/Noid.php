@@ -1816,6 +1816,27 @@ NAAN:      $naan
         return dba_fetch("$R/$varname", $db);
     }
 
+    /**
+     * Get a user note.
+     *
+     * @param string $noid
+     * @param string $key
+     * @return string The note.
+     */
+    static public function get_note($noid, $key)
+    {
+        self::init();
+
+        $R = &self::$_R;
+
+        $db = self::_getDb($noid);
+        if (is_null($db)) {
+            return;
+        }
+
+        return dba_fetch("$R/$R/$key", $db);
+    }
+
     #=for deleting
     /**
      * Simple ancillary counter that we currently use to pair a sequence number
@@ -3183,6 +3204,8 @@ Noid - routines to mint and manage nice opaque identifiers
 		$id, $elem, $value );	# need to conform to a template
 
  Noid::note( $noid, $contact, $key, $value );	# add an internal note
+
+ Noid::get_note( $noid, $key );  # get an internal user note
 
  Noid::fetch( $noid, $verbose,		# fetch bound data; set $verbose
  		$id, @elems );		# to 1 to return labels

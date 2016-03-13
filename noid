@@ -656,6 +656,33 @@ class NoidDo
     }
 
     /**
+     * Get a user note from a key.
+     *
+     * @param string $key
+     * @return integer 0 (error) or 1 (success)
+     */
+    public function get_note($key)
+    {
+        global $stderr;
+        global $dbname;
+
+        $noid = Noid::dbopen($dbname, Noid::DB_RDONLY);
+        if (! $noid) {
+            fwrite($stderr, Noid::errmsg($noid));
+            return 0;
+        }
+        $note = Noid::get_note($noid, $key);
+        if (is_null($note)) {
+            fwrite($stderr, Noid::errmsg($noid));
+        }
+        else {
+            print($note);
+        }
+        Noid::dbclose($noid);
+        return 1;
+    }
+
+    /**
      * A useless function to check the module.
      *
      * @return void

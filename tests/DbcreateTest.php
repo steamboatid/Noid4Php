@@ -150,6 +150,34 @@ class NoidDbCreateTest extends PHPUnit_Framework_TestCase
         Noid::dbclose($noid);
     }
 
+    /**
+     * Test a user note.
+     */
+    public function testNote()
+    {
+        $erc = $this->_short('8r9.sdd');
+        $regex = '/Size:\s*100\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '2-digit sequential';
+
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
+
+        $result = Noid::note($noid, $contact, 'keynote', 'Value of the note');
+        $this->assertNotEmpty($result);
+
+        $result = Noid::note($noid, $contact, 'keynote', 'Replacement value');
+        $this->assertNotEmpty($result);
+
+        $value = Noid::get_note($noid, 'keynote');
+        $this->assertEquals('Replacement value', $value);
+
+        $value = Noid::get_note($noid, 'otherkey');
+        $this->assertEmpty($value);
+
+        Noid::dbclose($noid);
+    }
+
     protected function _executeCommand($cmd, &$status, &$output, &$errors)
     {
         // Using proc_open() instead of exec() avoids an issue: current working
