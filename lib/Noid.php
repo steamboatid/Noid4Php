@@ -13,14 +13,6 @@
  * @version 1.0.0-0.424-php
  */
 
-/*
-require Exporter;
-our @ISA = qw(Exporter);
-
-use Fcntl qw(:DEFAULT :flock);
-use BerkeleyDB;
-*/
-
 /**
  * Noid - Nice opaque identifiers (Perl module)
  *
@@ -77,6 +69,16 @@ class Noid
     const NOLIMIT = -1;
     const SEQNUM_MIN = 1;
     const SEQNUM_MAX = 1000000;
+
+    const DB_CREATE = 'c';
+    const DB_RDONLY = 'r';
+    const DB_WRITE = 'w';
+
+    // For compatibility purpose with the perl script.  All other constants are
+    // internal. They are used only with dbopen().
+    const BDB_CREATE = 1;
+    const BDB_RDONLY = 1024;
+    const BDB_WRITE = 0;
 
     /**
      * The database must hold nearly arbitrary user-level identifiers
@@ -137,6 +139,14 @@ class Noid
      * @var integer
      */
     public $locktest = 0;
+
+    /**
+     * Locking can be "l" (a .lck file is created) or "d" (the db file itself is
+     * locked). Default is "d" and "l" has not been checked.
+     *
+     * @var string
+     */
+    protected $_dbaLock = 'd';
 
     /**
      * Legal values of $how for the bind() function.
@@ -214,6 +224,18 @@ class Noid
 
     public function __construct()
     {
+        // Check if dba is installed.
+        if (!extension_loaded('dba')) {
+            if (!function_exists('dl') || !dl('dba.so')) {
+                throw new Exception('Noid requires the extension "Database (dbm-style) Abstraction Layer" (dba).');
+            }
+        }
+
+        // Check if BerkeleyDB is installed.
+        if (!in_array('db4', dba_handlers())) {
+            throw new Exception('Noid requires BerkeleyDB: not installed.');
+        }
+
         // Initialize some public values.
         $this->legalstring = join('', $this->_xdig);
         $this->alphacount = strlen($this->legalstring);
@@ -226,7 +248,7 @@ class Noid
      * message gets saved to what essentially acts like a global (possible
      * threading conflict).
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $message
      * @return integer 1
      */
@@ -241,7 +263,7 @@ class Noid
      * Returns accumulated messages for a database pointer/object.  If the
      * second argument is non-zero, also reset the message to the empty string.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $reset
      * @return string
      */
@@ -258,7 +280,7 @@ class Noid
     /**
      * Logs a message.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $message
      * @return integer 1
      */
@@ -295,7 +317,7 @@ class Noid
     /**
      * Returns ANVL message on success, null on error.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $contact
      * @param string $validate
      * @param string $how
@@ -316,7 +338,7 @@ class Noid
         #     (for errors more than for security)
         # yyy should this genonly setting be so capable of contradicting
         #     the $validate arg?
-        if ($$noid["$R/genonly"]
+        if (dba_fetch("$R/genonly", $noid)
                 && $validate
                 && !$this->validate($noid, '-', $id)
             ) {
@@ -351,7 +373,7 @@ class Noid
             }
             $id = "$R/idmap/$oelem";
             $elem = $matches[1];
-            if ($$noid["$R/longterm"]) {
+            if (dba_fetch("$R/longterm", $noid)) {
                 $hold = 1;
             }
         }
@@ -361,8 +383,8 @@ class Noid
         # hasn't been issued unless a hold was placed on it.
         #
         # If no circ record and no hold...
-        if (empty($$noid["$id\t$R/c"]) && !isset($$noid["$id\t$R/h"])) {
-            if ($$noid["$R/longterm"]) {
+        if (empty(dba_fetch("$id\t$R/c", $noid)) && !dba_exists("$id\t$R/h", $noid)) {
+            if (dba_fetch("$R/longterm", $noid)) {
                 $this->addmsg($noid, sprintf('error: %s: "long" term disallows binding an unissued identifier unless a hold is first placed on it.', $oid));
                 return;
             }
@@ -408,13 +430,13 @@ class Noid
         # If we get here, $value is defined and we can use with impunity.
 
         $this->_dblock();
-        if (!isset($$noid["$id\t$elem"])) {      # currently unbound
+        if (!empty(dba_fetch("$id\t$elem", $noid))) {      # currently unbound
             if (in_array($how, array('replace', 'append', 'prepend', 'delete'))) {
                 $this->addmsg($noid, sprintf('error: for "bind %s", "%s %s" must already be bound.', $how, $oid, $oelem));
                 $this->_dbunlock();
                 return;
             }
-            $$noid["$id\t$elem"] = '';  # can concatenate with impunity
+            dba_replace("$id\t$elem", '', $noid);  # can concatenate with impunity
         }
         else {                      # currently bound
             if (in_array($how, array('new', 'mint', 'peppermint'))) {
@@ -425,28 +447,29 @@ class Noid
         }
         # We don't care about bound/unbound for:  set, add, insert, purge
 
-        $oldlen = strlen($$noid["$id\t$elem"]);
+        $oldlen = strlen(dba_fetch("$id\t$elem", $noid));
         $newlen = strlen($value);
         $statmsg = sprintf('%s bytes written', $newlen);
 
         if ($how === 'delete' || $how === 'purge') {
-            unset($$noid["$id\t$elem"]);
+            dba_delete("$id\t$elem", $noid);
             $statmsg = "$oldlen bytes removed";
         }
         elseif ($how === 'add' || $how === 'append') {
-            $$noid["$id\t$elem"] .= $value;
+            dba_replace("$id\t$elem", dba_fetch("$id\t$elem", $noid) . $value, $noid);
             $statmsg .= " to the end of $oldlen bytes";
         }
         elseif ($how === 'insert' || $how === 'prepend') {
-            $$noid["$id\t$elem"] = $value . $$noid["$id\t$elem"];
+            dba_replace("$id\t$elem", $value . dba_fetch("$id\t$elem", $noid), $noid);
             $statmsg .= " to the beginning of $oldlen bytes";
         }
+        // Else $how is "replace" or "set".
         else {
-            $$noid["$id\t$elem"] = $value;
+            dba_replace("$id\t$elem", $value, $noid);
             $statmsg .= ", replacing $oldlen bytes";
         }
 
-        if ($hold and isset($$noid["$id\t$elem"]) and ! $this->hold_set($noid, $id)) {
+        if ($hold && dba_exists("$id\t$elem", $noid) && !$this->hold_set($noid, $id)) {
             $hold = -1; # don't just bail out -- we need to unlock
         }
 
@@ -517,7 +540,7 @@ class Noid
      *
      * Use dblock() before and dbunlock() after calling this routine.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $id
      * @param string $verbose
      * @return array
@@ -548,12 +571,12 @@ class Noid
         }
 
         while (! $done) {
-            if (! $skip and $verbose) {
+            if (! $skip && $verbose) {
                 # if $verbose (ie, fetch), include label and
                 # remember to strip "Id\t" from front of $key
                 $key = preg_match('/^[^\t]*\t(.*)/', $key, $matches) ? $matches[1] : $key;
                 $retvals[] = $key . ': ' . sprintf('clearing %d bytes', strlen($value));
-                unset($$noid[$key]);
+                dba_delete($key, $noid);
             }
 
             $status = $cursor->c_get($key, $value, DB_NEXT);
@@ -669,7 +692,7 @@ class Noid
             $this->addmsg(null, sprintf("Couldn't chmod logbdb file: %s", $error['message']));
             return;
         }
-        $noid = $this->dbopen($dbname, DB_CREATE);
+        $noid = $this->dbopen($dbname, self::DB_CREATE);
         if (! $noid) {
             $error = error_get_last();
             $this->addmsg(null, sprintf("can't create database file: %s", $error['message']));
@@ -682,24 +705,24 @@ class Noid
         # Database info
         # yyy should be using db-> ops directly (for efficiency and?)
         #     so we can use DB_DUP flag
-        $$noid["$R/naa"] = $naa;
-        $$noid["$R/naan"] = $naan;
-        $$noid["$R/subnaa"] = $subnaa ?: '';
+        dba_replace("$R/naa", $naa, $noid);
+        dba_replace("$R/naan", $naan, $noid);
+        dba_replace("$R/subnaa", $subnaa ?: '', $noid);
 
-        $$noid["$R/longterm"] = ($term === 'long');
-        $$noid["$R/wrap"] = ($term === 'short');     # yyy follow through
+        dba_replace("$R/longterm", $term === 'long', $noid);
+        dba_replace("$R/wrap", $term === 'short', $noid);     # yyy follow through
 
-        $$noid["$R/template"] = $template;
-        $$noid["$R/prefix"] = $prefix;
-        $$noid["$R/mask"] = $mask;
-        $$noid["$R/firstpart"] = ($naan ? $naan . '/' : '') . $prefix;
-        $$noid["$R/addcheckchar"] = (boolean) preg_match('/k$/', $mask);    # boolean answer
+        dba_replace("$R/template", $template, $noid);
+        dba_replace("$R/prefix", $prefix, $noid);
+        dba_replace("$R/mask", $mask, $noid);
+        dba_replace("$R/firstpart", ($naan ? $naan . '/' : '') . $prefix, $noid);
+        dba_replace("$R/addcheckchar", (boolean) preg_match('/k$/', $mask), $noid);    # boolean answer
 
-        $$noid["$R/generator_type"] = $gen_type;
-        $$noid["$R/genonly"] = $genonly;
+        dba_replace("$R/generator_type", $gen_type, $noid);
+        dba_replace("$R/genonly", $genonly, $noid);
 
-        $$noid["$R/total"] = $total;
-        $$noid["$R/padwidth"] = ($total == self::NOLIMIT ? 16 : 2) + strlen($mask);
+        dba_replace("$R/total", $total, $noid);
+        dba_replace("$R/padwidth", ($total == self::NOLIMIT ? 16 : 2) + strlen($mask), $noid);
             # yyy kludge -- padwidth of 16 enough for most lvf sorting
 
         # Some variables:
@@ -707,16 +730,16 @@ class Noid
         #   oatop   overall counter's greatest possible value of counter
         #   held    total with "hold" placed
         #   queued  total currently in the queue
-        $$noid["$R/oacounter"] = 0;
-        $$noid["$R/oatop"] = $total;
-        $$noid["$R/held"] = 0;
-        $$noid["$R/queued"] = 0;
+        dba_replace("$R/oacounter", 0, $noid);
+        dba_replace("$R/oatop", $total, $noid);
+        dba_replace("$R/held", 0, $noid);
+        dba_replace("$R/queued", 0, $noid);
 
-        $$noid["$R/fseqnum"] = self::SEQNUM_MIN;  # see queue() and mint()
-        $$noid["$R/gseqnum"] = self::SEQNUM_MIN;  # see queue()
-        $$noid["$R/gseqnum_date"] = 0;      # see queue()
+        dba_replace("$R/fseqnum", self::SEQNUM_MIN, $noid);  # see queue() and mint()
+        dba_replace("$R/gseqnum", self::SEQNUM_MIN, $noid);  # see queue()
+        dba_replace("$R/gseqnum_date", 0, $noid);      # see queue()
 
-        $$noid["$R/version"] = self::VERSION;
+        dba_replace("$R/version", self::VERSION, $noid);
 
         # yyy should verify that a given NAAN and NAA are registered,
         #     and should offer to register them if not.... ?
@@ -762,12 +785,12 @@ class Noid
             . ($genonly && !preg_match('/eee/', $pre . substr($msk, 1)) ? 'A' : '-')
             . ($term === 'long' ? 'N' : '-')
             . ($genonly && !preg_match('/-/', $prefix) ? 'I' : '-')
-            . ($$noid["$R/addcheckchar"] ? 'T' : '-')
+            . (dba_fetch("$R/addcheckchar", $noid) ? 'T' : '-')
             # yyy "E" mask test anticipates future extensions to alphabets
             . ($genonly && (preg_match('/[aeiouy]/i', $prefix) || preg_match('/[^rszdek]/', $mask))
                 ? '-' : 'E')        # Elided vowels or not
         ;
-        $$noid["$R/properties"] = $properties;
+        dba_replace("$R/properties", $properties, $noid);
 
         # Now figure out "where" element.
         #
@@ -835,7 +858,7 @@ class Noid
             . '       ' . sprintf('Sample identifiers would be "%s" and "%s".', $sample1, $sample2) . PHP_EOL
             . '       ' . sprintf('Minting order is %s.', $gen_type);
 
-        $$noid["$R/erc"] =
+        $erc =
 "# Creation record for the identifier generator in NOID/noid.bdb.
 #
 erc:
@@ -867,8 +890,9 @@ Policy:    (:$properties)
 Authority: $naa | $subnaa
 NAAN:      $naan
 ";
+        dba_replace("$R/erc", $erc, $noid);
 
-        if (! $this->_storefile("$dir/README", $$noid["$R/erc"])) {
+        if (! $this->_storefile("$dir/README", dba_fetch("$R/erc", $noid))) {
             return;
         }
         # yyy useful for quick info on a minter from just doing 'ls NOID'??
@@ -890,60 +914,73 @@ NAAN:      $naan
     /**
      * Report values according to level.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $level Possible values:
      * - "brief" (default): user vals and interesting admin vals
      * - "full": user vals and all admin vals
      * - "dump": all vals, including all identifier bindings
      * @return integer 0 (error) or 1 (success)
      */
-    public function dbinfo($noid, $level)
+    public function dbinfo($noid, $level = 'brief')
     {
         $R = &$this->_R;
 
         $db = $this->_opendbtab["bdb/$noid"];
-        $cursor = $db->db_cursor();
-        $key = $R . '/';
+        // Reset the cursor.
+        $key = dba_firstkey($db);
+        $key = "$R/";
         $value = 0;
+
         if ($level === 'dump') {
-            do {
-                print "$key: $value" . PHP_EOL;
-            } while ($cursor->c_get($key, $value, DB_NEXT) == 0);
+            while ($key != false) {
+                $value = dba_fetch($key, $db);
+                print $key . ': ' . $value . PHP_EOL;
+                $key = dba_nextkey($db);
+            }
             return 1;
         }
+
+        // TODO No "set range" for php.
         $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         if ($status) {
             $error = error_get_last();
             $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $error['message']));
             return 0;
         }
+
+        $key = dba_nextkey($db);
         if (strpos($key, "$R/$R") === 0) {
             print 'User Assigned Values' . PHP_EOL;
             print "  $key: $value" . PHP_EOL;
-            while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
+            while ($key != false) {
                 if (strpos($key, "$R/$R") !== 0) {
                     break;
                 }
-                print "  $key: $value" . PHP_EOL;
+                $value = dba_fetch($key, $db);
+                print '  ' . $key . ': ' . $value . PHP_EOL;
+                $key = dba_nextkey($db);
             }
             print PHP_EOL;
         }
+
         print 'Admin Values' . PHP_EOL;
         print "  $key: $value" . PHP_EOL;
-        while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
+        while ($key != false) {
             if (strpos($key, "$R/") !== 0) {
                 break;
             }
             if ($level === 'full'
-                    or !preg_match("|^$R/c\d|", $key)
+                    || !preg_match("|^$R/c\d|", $key)
                     && strpos($key, "$R/saclist") !== 0
                     && strpos($key, "$R/recycle/") !== 0
                 ) {
-                print "  $key: $value" . PHP_EOL;
+                $value = dba_fetch($key, $db);
+                print '  ' . $key . ': ' . $value . PHP_EOL;
+                $key = dba_nextkey($db);
             }
         }
         print PHP_EOL;
-        unset($cursor);
+        // unset($cursor);
         return 1;
     }
 
@@ -976,11 +1013,30 @@ NAAN:      $naan
      *
      * @param string $dbname
      * @param integer $flags
-     * Can be DB_RDONLY, DB_CREATE, or 0 (for read/write, the default)
-     * @return
+     * Can be DB_RDONLY, DB_CREATE, or DB_WRITE (the default).
+     * Support for perl script: BDB_RDONLY, BDB_CREATE, BDB_WRITE, without bit
+     * checking.
+     * @return resource|null
      */
-    public function dbopen($dbname, $flags)
+    public function dbopen($dbname, $flags = self::DB_WRITE)
     {
+        // For compatibility purpose between perl and php.
+        switch ($flags) {
+            case self::DB_RDONLY:
+            case self::BDB_RDONLY:
+            default:
+                $flags = self::DB_RDONLY;
+                break;
+            case self::DB_CREATE:
+            case self::BDB_CREATE:
+                $flags = self::DB_CREATE;
+                break;
+            case self::DB_WRITE:
+            case self::BDB_WRITE:
+                $flags = self::DB_WRITE;
+                break;
+        }
+
         # yyy to test: can we now open more than one noid at once?
 
         $env = null;
@@ -992,10 +1048,13 @@ NAAN:      $naan
         }
 
         # yyy probably these envflags are overkill right now
+        /*
         $envflags = DB_INIT_LOCK | DB_INIT_TXN | DB_INIT_MPOOL;
         #my $envflags = DB_INIT_CDB | DB_INIT_MPOOL;
-        if ($flags & DB_CREATE) {
-            $envflags |= DB_CREATE;
+        */
+        $envflags = 0;
+        $envargs = array();
+        if ($flags == self::DB_CREATE) {
             $envargs = array(
                 '-Home' => $envhome,
                 '-Flags' => $envflags,
@@ -1015,19 +1074,22 @@ NAAN:      $naan
         }
         # yyy should we complain if can't open log file?
 
-        $env = new BerkeleyDB::Env($envargs);
+        /*
+        // TODO No management of Berkeley Environment on php.
+        $env = BerkeleyDB::Env($envargs);
         if (empty($env)) {
             $this->addmsg(null, sprintf('no "Env" object (%s)', $BerkeleyDB::Error));
             return;
         }
+        */
 
         #=for deleting
         #
         #   print "OK so far\n"; exit(0);
-        #   if ($flags && DB_CREATE) {
+        #   if ($flags && self::DB_CREATE) {
         #       # initialize environment files
         #       print sprintf('envhome=%s', $envhome) . PHP_EOL;
-        #       $env = new BerkeleyDB::Env($envargs);
+        #       $env = BerkeleyDB::Env($envargs);
         #       if (! isset($env)) {
         #           $this->addmsg(null,
         #               sprintf('no "Env" object (%s)', $BerkeleyDB::Error)),
@@ -1038,7 +1100,7 @@ NAAN:      $naan
         #       print sprintf('flags=%s', $flags) . PHP_EOL;
         #   }
         #   print 'OK so far' . PHP_EOL; exit(0);
-        #   $env = new BerkeleyDB::Env($envargs);
+        #   $env = BerkeleyDB::Env($envargs);
         #   if (!isset($env)) {
         #       die sprintf('unable to get a "BerkeleyDB::Env" object (%s), stopped', $BerkeleyDB::Error);
         #   }
@@ -1047,13 +1109,17 @@ NAAN:      $naan
 
         $noid = array();      # eventual minter database handle
 
+        /*
+        // Database is locked automatically with php.
+        // TODO No management of the alarm on php.
+
         # For now we use simple database-level file locking with a timeout.
         # Unlocking is implicit when the NOIDLOCK file handle is closed
         # either explicitly or upon process termination.
         #
         $lockfile = $envhome . "lock";
         $timeout = 5;    # max number of seconds to wait for lock
-        $locktype = ($flags & DB_RDONLY) ? LOCK_SH : LOCK_EX;
+        $locktype = ($flags == self::DB_RDONLY) ? LOCK_SH : LOCK_EX;
 
         if (! sysopen(NOIDLOCK, $lockfile, O_RDWR | O_CREAT)) {
             $error = error_get_last();
@@ -1089,6 +1155,16 @@ NAAN:      $naan
             $this->addmsg(null, sprintf('tie failed on %s: %s', $dbname, $BerkeleyDB::Error));
             return;
         }
+        */
+
+        $mode = $flags . $this->_dbaLock;
+        $db = @dba_open($dbfile, $mode, 'db4');
+
+        if ($db === false) {
+            $error = error_get_last();
+            $this->addmsg(null, sprintf('Failed to open database %s: %s', $dbname, $error['message']));
+            return;
+        }
         # yyy how to set error code or return string?
         #   or die("Can't open database file: $!\n");
         #print "dbopen: returning hashref=$noid, db=$db\n";
@@ -1121,19 +1197,21 @@ NAAN:      $naan
     /**
      * Close database.
      *
-     * @param string $noid
+     * @param resource $noid
      * @return void
      */
     public function dbclose($noid)
     {
-        undef $this->_opendbtab["msg/$noid"];
-        if (!empty($this->_opendbtab["log/$noid"])) {
+        unset($this->_opendbtab["msg/$noid"]);
+        if (!is_null($this->_opendbtab["log/$noid"])) {
             fclose($this->_opendbtab["log/$noid"]);
         }
-        undef $this->_opendbtab["bdb/$noid"];
-        untie %$noid;
+        dba_close($this->_opendbtab["bdb/$noid"]);
+        unset($noid);
+        /*
         // Let go of lock.
         close NOIDLOCK;
+        */
     }
 
     /**
@@ -1144,7 +1222,7 @@ NAAN:      $naan
      * The 3rd parameter will contain the corresponding value.
      *
      * @todo is this needed? in present form?
-     * @param string $noid
+     * @param resource $noid
      * @param string $key
      * @param string $value
      * @return integer 0 (error) or 1 (success)
@@ -1156,11 +1234,12 @@ NAAN:      $naan
         $db = $this->_opendbtab["bdb/$noid"];
         #was: $flag = ($key ? R_NEXT : R_FIRST);
         # fix from Jim Fullton:
-        $flag = $key ? DB_NEXT : DB_FIRST;
-        $cursor = $db->db_cursor();
-        if ($cursor->c_get($key, $value, $flag)) {
+        $key = empty($key) ? dba_firstkey($db) : dba_nextkey($db);
+        if ($key == false) {
+            $value = null;
             return 0;
         }
+        $value = dba_fetch($key, $db);
         return 1;
     }
 
@@ -1178,7 +1257,7 @@ NAAN:      $naan
      * @todo do we need to be able to "get/fetch" with a discriminant,
      *       eg, for smart multiple resolution??
      *
-     * @param string $noid
+     * @param resource $noid
      * @param integer $verbose is 1 if we want labels, 0 if we don't
      * @param string $id
      * @param array $elems
@@ -1188,7 +1267,7 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        if (is_null($id)) {
+        if (empty($id)) {
             $this->addmsg($noid, sprintf('error: %s requires that an identifier be specified.', $verbose ? 'fetch' : 'get'));
             return;
         }
@@ -1197,17 +1276,13 @@ NAAN:      $naan
         $retval = '';
         if ($verbose) {
             $hdr = "id:    $id"
-                . (isset($$noid["$id\t$R/h"]) ? ' hold ': '') . PHP_EOL
+                . (dba_exists("$id\t$R/h", $noid) ? ' hold ': '') . PHP_EOL
                 . ($this->validate($noid, '-', $id) ? '' : $this->errmsg($noid) . PHP_EOL)
-                . "Circ:  "
-                . ($$noid["$id\t$R/c"]
-                    ? $$noid["$id\t$R/c"]
-                    : 'uncirculated')
-                . PHP_EOL;
+                . 'Circ:  ' . (dba_fetch("$id\t$R/c", $noid) ?: 'uncirculated') . PHP_EOL;
         }
 
         $db = $this->_opendbtab["bdb/$noid"];
-        $cursor = $db->db_cursor();
+        $key = dba_firstkey($db);
 
         if (empty($elems)) {  # No elements were specified, so find them.
             $first = $id . "\t";
@@ -1215,7 +1290,8 @@ NAAN:      $naan
             $done = 0;
             $key = $first;
             $value = 0;
-            $status = $cursor->c_get($key, $value, DB_SET_RANGE);
+            // $status = $cursor->c_get($key, $value, DB_SET_RANGE);
+            $value = dba_fetch($key, $noid);
             if ($status == 0) {
                 $skip = strpos($key, "$first$R/") === 0;
                 $done = strpos($key, $first) !== 0;
@@ -1233,7 +1309,9 @@ NAAN:      $naan
                     }
                     $retval .= $value . PHP_EOL;
                 }
-                $status = $cursor->c_get($key, $value, DB_NEXT);
+                // $status = $cursor->c_get($key, $value, DB_NEXT);
+                $value = dba_fetch($key, $noid);
+                $key = dba_nextkey($noid);
                 if ($status != 0 || strpos($key, $first) !== 0) {
                     $done = 1;   # no more elements under id
                 }
@@ -1255,11 +1333,11 @@ NAAN:      $naan
         # XXX idmap won't bind with longterm ???
         $idmapped = null;
         foreach ($elems as $elem) {
-            if (!empty($$noid["$id\t$elem"])) {
+            if (dba_fetch("$id\t$elem", $noid)) {
                 if ($verbose) {
                     $retval .= "$elem: ";
                 }
-                $retval .= $$noid["$id\t$elem"] . PHP_EOL;
+                $retval .= dba_fetch("$id\t$elem", $noid) . PHP_EOL;
             }
             else {
                 $idmapped = $this->_id2elemval($cursor, $verbose, $id, $elem);
@@ -1285,7 +1363,7 @@ NAAN:      $naan
      *
      * This routine and n2xdig comprise the real heart of the minter software.
      *
-     * @param string $noid
+     * @param resource $noid
      * @return string
      */
     protected function _genid($noid)
@@ -1301,28 +1379,28 @@ NAAN:      $naan
         #   siclist (sub) inactive counters list
         #   c$n/value   subcounter name's ($scn) value
 
-        $oacounter = $$noid["$R/oacounter"];
+        $oacounter = dba_fetch("$R/oacounter", $noid);
 
         # yyy what are we going to do with counters for held? queued?
 
-        if ($$noid["$R/oatop"] != self::NOLIMIT && $oacounter >= $$noid["$R/oatop"]) {
+        if (dba_fetch("$R/oatop", $noid) != self::NOLIMIT && $oacounter >= dba_fetch("$R/oatop", $noid)) {
 
             # Critical test of whether we're willing to re-use identifiers
             # by re-setting (wrapping) the counter to zero.  To be extra
             # careful we check both the longterm and wrap settings, even
             # though, in theory, wrap won't be set if longterm is set.
             #
-            if ($$noid["$R/longterm"] || ! $$noid["$R/wrap"]) {
+            if (dba_fetch("$R/longterm", $noid) || !dba_fetch("$R/wrap", $noid)) {
                 $this->_dbunlock();
-                $m = sprintf('error: identifiers exhausted (stopped at %s).', $$noid["$R/oatop"]);
+                $m = sprintf('error: identifiers exhausted (stopped at %s).', dba_fetch("$R/oatop", $noid));
                 $this->addmsg($noid, $m);
                 $this->logmsg($noid, $m);
                 return;
             }
             # If we get here, term is not "long".
             $this->logmsg($noid, sprintf('%s: Resetting counter to zero; previously issued identifiers will be re-issued', $this->_temper()));
-            if ($$noid["$R/generator_type"] === 'sequential') {
-                $$noid["$R/oacounter"] = 0;
+            if (dba_fetch("$R/generator_type", $noid) === 'sequential') {
+                dba_replace("$R/oacounter", 0, $noid);
             }
             else {
                 $this->_init_counters($noid);   # yyy calls dblock -- problem?
@@ -1333,16 +1411,16 @@ NAAN:      $naan
 
         # Deal with the easy sequential generator case and exit early.
         #
-        if ($$noid["$R/generator_type"] === 'sequential') {
-            $id = $this->n2xdig($$noid["$R/oacounter"], $$noid["$R/mask"]);
-            $$noid["$R/oacounter"]++;   # incr to reflect new total
+        if (dba_fetch("$R/generator_type", $noid) === 'sequential') {
+            $id = $this->n2xdig(dba_fetch("$R/oacounter", $noid), dba_fetch("$R/mask", $noid));
+            dba_replace("$R/oacounter", dba_fetch("$R/oacounter", $noid) + 1, $noid);   # incr to reflect new total
             $this->_dbunlock();
             return $id;
         }
 
         # If we get here, the generator must be of type "random".
         #
-        $saclist = explode(' ', $$noid["$R/saclist"]);
+        $saclist = explode(' ', dba_fetch("$R/saclist", $noid));
         $len = count($saclist);
         if ($len < 1) {
             $this->_dbunlock();
@@ -1353,14 +1431,14 @@ NAAN:      $naan
         $sctrn = $saclist[$randn];   # at random; then pull its $n
         $n = substr($sctrn, 1);  # numeric equivalent from the name
         #print "randn=$randn, sctrn=$sctrn, counter n=$n\t";
-        $sctr = $$noid["$R/${sctrn}/value"]; # and get its value
+        $sctr = dba_fetch("$R/${sctrn}/value", $noid); # and get its value
         $sctr++;                # increment and
-        $$noid["$R/${sctrn}/value"] = $sctr;    # store new current value
-        $$noid["$R/oacounter"]++;       # incr overall counter - some
+        dba_replace("$R/${sctrn}/value", $sctr, $noid);    # store new current value
+        dba_replace("$R/oacounter", dba_fetch("$R/oacounter", $noid) + 1, $noid);       # incr overall counter - some
                             # redundancy for sanity's sake
 
         # deal with an exhausted subcounter
-        if ($sctr >= $$noid["$R/${sctrn}/top"]) {
+        if ($sctr >= dba_fetch("$R/${sctrn}/top", $noid)) {
             $c = '';
             $modsaclist ='';
             # remove from active counters list
@@ -1370,15 +1448,15 @@ NAAN:      $naan
                 }
                 $modsaclist .= $c . ' ';
             }
-            $$noid["$R/saclist"] = $modsaclist;     # update saclist
-            $$noid["$R/siclist"] .= $sctrn;      # and siclist
+            dba_replace("$R/saclist", $modsaclist, $noid);     # update saclist
+            dba_replace("$R/siclist", dba_fetch("$R/siclist", $noid) . ' ' . $sctrn, $noid);      # and siclist
             #print "===> Exhausted counter $sctrn\n";
         }
 
         # $sctr holds counter value, $n holds ordinal of the counter itself
         $id = $this->n2xdig(
-                $sctr + ($n * $$noid["$R/percounter"]),
-                $$noid["$R/mask"]);
+                $sctr + ($n * dba_fetch("$R/percounter", $noid)),
+                dba_fetch("$R/mask", $noid));
         $this->_dbunlock();
         return $id;
     }
@@ -1394,7 +1472,7 @@ NAAN:      $naan
      *           circ status goes first to make record easy to update
      *    id\t:/p    pepper
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $id
      * @return string
      * Returns a single letter circulation status, which must be one
@@ -1404,7 +1482,7 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        $circ_rec = $$noid["$id\t$R/c"];
+        $circ_rec = dba_fetch("$id\t$R/c", $noid);
         if (empty($circ_rec)) {
             return '';
         }
@@ -1440,7 +1518,7 @@ NAAN:      $naan
      * for errors; this routine is not externally visible anyway.  Returns the
      * input identifier on success, or null on error.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $id
      * @param string $circ_svec
      * @param string $date
@@ -1452,7 +1530,7 @@ NAAN:      $naan
         $R = &$this->_R;
 
         $status = 1;
-        $circ_rec = "$circ_svec|$date|$contact|" . $$noid["$R/oacounter"];
+        $circ_rec = "$circ_svec|$date|$contact|" . dba_fetch("$R/oacounter", $noid);
 
         # yyy do we care what the previous circ record was?  since right now
         #     we just clobber without looking at it
@@ -1467,19 +1545,19 @@ NAAN:      $naan
         #
         if (substr($circ_svec, 0, 1) == 'i') {
             $this->_clear_bindings($noid, $id, 0);
-            unset($$noid["$id\t$R/p"]);
-            if (!empty($$noid["$R/longterm"])) {
+            dba_delete("$id\t$R/p", $noid);
+            if (dba_fetch("$R/longterm", $noid)) {
                 $status = $this->hold_set($noid, $id);
             }
         }
-        $$noid["$id\t$R/c"] = $circ_rec;
+        dba_replace("$id\t$R/c", $circ_rec, $noid);
 
         $this->_dbunlock();
 
         # This next logmsg should account for the bulk of the log when
         # longterm identifiers are in effect.
         #
-        if ($$noid["$R/longterm"]) {
+        if (dba_fetch("$R/longterm", $noid)) {
             $this->logmsg($noid, sprintf('m: %s%s', $circ_rec, $status ? '' : ' -- hold failed'));
         }
 
@@ -1493,7 +1571,7 @@ NAAN:      $naan
      * Get the value of any named internal variable (prefaced by $R)
      * given an open database reference.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $varname
      * @return string
      */
@@ -1501,7 +1579,7 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        return $$noid["$R/$varname"];
+        return dba_fetch("$R/$varname", $noid);
     }
 
     #=for deleting
@@ -1514,7 +1592,7 @@ NAAN:      $naan
      * @internal should we make it do zero-padding on the left to a fixed width
      * determined by number of digits in the total?
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $direction
      * @return string
      */
@@ -1523,12 +1601,14 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-       $direction > 0
-           and return ++$$noid["$R/seqnum"];
-       $direction < 0
-           and return --$$noid["$R/seqnum"];
-       # $direction must == 0
-       return $$noid["$R/seqnum"] = 0;
+        if ($direction > 0) {
+            return dba_replace("$R/seqnum", dba_fetch("$R/seqnum", $noid) + 1, $noid);
+        }
+        if ($direction < 0) {
+            return dba_replace("$R/seqnum", dba_fetch("$R/seqnum", $noid) - 1, $noid);
+        }
+        # $direction must == 0
+        return dba_replace("$R/seqnum", 0, $noid);
     }
     */
     #=cut
@@ -1536,7 +1616,7 @@ NAAN:      $naan
     /**
      * A hold may be placed on an identifier to keep it from being minted/issued.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $contact
      * @param string $on_off
      * @param array $ids
@@ -1548,7 +1628,7 @@ NAAN:      $naan
         $R = &$this->_R;
 
         # yyy what makes sense in this case?
-        # if (! $$noid["$R/template"]) {
+        # if (! dba_fetch("$R/template", $noid)) {
         #   $this->addmsg($noid,
         #       'error: holding makes no sense in a bind-only minter.');
         #   return 0;
@@ -1573,7 +1653,7 @@ NAAN:      $naan
         $release = $on_off === 'release';
         # yyy what is sensible thing to do if no ids are present?
         $iderror = '';
-        if ($$noid["$R/genonly"]) {
+        if (dba_fetch("$R/genonly", $noid)) {
             $iderror = $this->validate($noid, '-', $ids);
             if (substr($iderror, 0, 6) != 'error:') {
                 $iderror = '';
@@ -1588,14 +1668,14 @@ NAAN:      $naan
         $n = 0;
         foreach ($ids as $id) {
             if ($release) {     # no hold means key doesn't exist
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid, sprintf('%s %s: releasing hold', $this->_temper(), $id));
                 }
                 $this->_dblock();
                 $status = hold_release($noid, $id);
             }
             else {          # "hold" means key exists
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid, sprintf('%s %s: placing hold', $this->_temper(), $id));
                 }
                 $this->_dblock();
@@ -1625,7 +1705,7 @@ NAAN:      $naan
      *
      * @todo don't care if hold was in effect or not
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $id
      * @return integer 0 (error) or 1 (success)
      */
@@ -1633,12 +1713,12 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        $$noid["$id\t$R/h"] = 1;        # value doesn't matter
-        $$noid["$R/held"]++;
-        if ($$noid["$R/total"] != self::NOLIMIT   # ie, if total is non-zero
-                && $$noid["$R/held"] > $$noid["$R/oatop"]
+        dba_replace("$id\t$R/h", 1, $noid);        # value doesn't matter
+        dba_replace("$R/held", dba_fetch("$R/held", $noid) + 1, $noid);
+        if (dba_fetch("$R/total", $noid) != self::NOLIMIT   # ie, if total is non-zero
+                && dba_fetch("$R/held", $noid) > dba_fetch("$R/oatop", $noid)
             ) {
-            $m = sprintf('error: hold count (%s) exceeding total possible on id %s', $$noid["$R/held"], $id);
+            $m = sprintf('error: hold count (%s) exceeding total possible on id %s', dba_fetch("$R/held", $noid), $id);
             $this->addmsg($noid, $m);
             $this->logmsg($noid, $m);
             return 0;
@@ -1652,7 +1732,7 @@ NAAN:      $naan
      *
      * @todo don't care if hold was in effect or not
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $id
      * @return integer 0 (error) or 1 (success)
      */
@@ -1660,10 +1740,10 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        unset($$noid["$id\t$R/h"]);
-        $$noid["$R/held"]--;
-        if ($$noid["$R/held"] < 0) {
-            $m = sprintf('error: hold count (%s) going negative on id %s', $$noid["$R/held"], $id);
+        dba_delete("$id\t$R/h", $noid);
+        dba_replace("$R/held", dba_fetch("$R/held", $noid) - 1, $noid);
+        if (dba_fetch("$R/held", $noid) < 0) {
+            $m = sprintf('error: hold count (%s) going negative on id %s', dba_fetch("$R/held", $noid), $id);
             $this->addmsg($noid, $m);
             $this->logmsg($noid, $m);
             return 0;
@@ -1734,7 +1814,7 @@ NAAN:      $naan
     /**
      * Initialize counters.
      *
-     * @param string $noid
+     * @param resource $noid
      * @return void
      */
     protected function _init_counters($noid)
@@ -1750,8 +1830,8 @@ NAAN:      $naan
 
         $this->_dblock();
 
-        $$noid["$R/oacounter"] = 0;
-        $total = $$noid["$R/total"];
+        dba_replace("$R/oacounter", 0, $noid);
+        $total = dba_fetch("$R/total", $noid);
 
         $maxcounters = 293;      # prime, a little more than 29*10
         #
@@ -1763,32 +1843,34 @@ NAAN:      $naan
         # object), would result in a reasonably balanced filesystem tree
         # -- no subdirectories too unevenly loaded.  That's the hope anyway.
 
-        $$noid["$R/percounter"] =   # max per counter, last has fewer
-            intval($total / $maxcounters + 1);     # round up to be > 0
+        dba_replace("$R/percounter",
+            intval($total / $maxcounters + 1),     # round up to be > 0
+            $noid);   # max per counter, last has fewer
 
         $n = 0;
         $t = $total;
-        $pctr = $$noid["$R/percounter"];
+        $pctr = dba_fetch("$R/percounter", $noid);
         $saclist = '';
         while ($t > 0) {
-            $$noid["$R/c${n}/top"] = ($t >= $pctr ? $pctr : $t);
-            $$noid["$R/c${n}/value"] = 0;       # yyy or 1?
+            dba_replace("$R/c${n}/top", $t >= $pctr ? $pctr : $t, $noid);
+            dba_replace("$R/c${n}/value", 0, $noid);       # yyy or 1?
             $saclist .= "c$n ";
             $t -= $pctr;
             $n++;
         }
-        $$noid["$R/saclist"] = $saclist;
-        $$noid["$R/siclist"] = '';
+        dba_replace("$R/saclist", $saclist, $noid);
+        dba_replace("$R/siclist", '', $noid);
         $n--;
 
         $this->_dbunlock();
 
-        #print "saclist: $$noid["$R/saclist"]\nfinal top: "
-        #   . $$noid["$R/c${n}/top"] . PHP_EOL . "percounter=$pctr" . PHP_EOL;
+        #print "saclist: dba_fetch("$R/saclist", $noid)\nfinal top: "
+        #   . dba_fetch("$R/c${n}/top", $noid) . PHP_EOL
+        #   . "percounter=$pctr" . PHP_EOL;
         #foreach $c ($$saclist) {
         #   print "$c, ";
         #}
-        #print "\n";
+        #print PHP_EOL;
     }
 
     /**
@@ -1801,7 +1883,7 @@ NAAN:      $naan
      *
      * Returns null on error.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $contact
      * @param string $pepper
      * @return string|null
@@ -1815,7 +1897,7 @@ NAAN:      $naan
             return;
         }
 
-        if (! $$noid["$R/template"]) {
+        if (! dba_fetch("$R/template", $noid)) {
             $this->addmsg($noid, 'error: this minter does not generate identifiers (it does accept user-defined identifier and element bindings).');
             return;
         }
@@ -1858,8 +1940,8 @@ NAAN:      $naan
             $qdate = preg_match("|$R/q/(\d{14})|", $key) ? $key : null;
             if (empty($qdate)) {           # nothing in queue
                 # this is our chance -- see queue() comments for why
-                if ($$noid["$R/fseqnum"] > self::SEQNUM_MIN) {
-                    $$noid["$R/fseqnum"] = self::SEQNUM_MIN;
+                if (dba_fetch("$R/fseqnum", $noid) > self::SEQNUM_MIN) {
+                    dba_replace("$R/fseqnum", self::SEQNUM_MIN, $noid);
                 }
                 break;               # so move on
             }
@@ -1873,8 +1955,9 @@ NAAN:      $naan
             # queue element.
             #
             $db->db_del($key);
-            if ($$noid["$R/queued"]-- <= 0) {
-                $m = sprintf('error: queued count (%s) going negative on id %s', $$noid["$R/queued"], $id);
+            dba_replace("$R/queued", dba_fetch("$R/queued", $noid) - 1, $noid);
+            if (dba_fetch("$R/queued", $noid) <= 0) {
+                $m = sprintf('error: queued count (%s) going negative on id %s', dba_fetch("$R/queued", $noid), $id);
                 $this->addmsg($noid, $m);
                 $this->logmsg($noid, $m);
                 return;
@@ -1884,8 +1967,8 @@ NAAN:      $naan
             # going to use this identifier.  First, if there's a hold,
             # remove it from the queue and check the queue again.
             #
-            if (isset($$noid["$id\t$R/h"])) {     # if there's a hold
-                if ($$noid["$R/longterm"]) {
+            if (dba_exists("$id\t$R/h", $noid)) {     # if there's a hold
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid,
                         sprintf('warning: id %s found in queue with a hold placed on it -- removed from queue.', $id));
                 }
@@ -1898,17 +1981,17 @@ NAAN:      $naan
             if (substr($circ_svec, 0, 1) === 'i') {
                 $this->logmsg($noid,
                     sprintf('error: id %s appears to have been issued while still in the queue -- circ record is %s',
-                        $id, $$noid["$id\t$R/c"]));
+                        $id, dba_fetch("$id\t$R/c", $noid)));
                 continue;
             }
             if (substr($circ_svec, 0, 1) === 'u') {
                 $this->logmsg($noid, sprintf('note: id %s, marked as unqueued, is now being removed/skipped in the queue -- circ record is %s',
-                    $id, $$noid["$id\t$R/c"]));
+                    $id, dba_fetch("$id\t$R/c", $noid)));
                 continue;
             }
             if (preg_match('/^([^q])/', $circ_svec, $matches)) {
                 $this->logmsg($noid, sprintf('error: id %s found in queue has an unknown circ status (%s) -- circ record is %s',
-                    $id, $matches[1], $$noid["$id\t$R/c"]));
+                    $id, $matches[1], dba_fetch("$id\t$R/c", $noid)));
                 continue;
             }
 
@@ -1917,7 +2000,7 @@ NAAN:      $naan
             # would normally be minted.  Log if term is "long".
             #
             if ($circ_svec === '') {
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid,
                         sprintf('note: queued id %s coming out of queue on first minting (pre-cycled)', $id));
                 }
@@ -1947,7 +2030,7 @@ NAAN:      $naan
             # over.  This step has no effect when $generator_type ==
             # "sequential".
             #
-            srand($$noid["$R/oacounter"]);
+            srand(dba_fetch("$R/oacounter", $noid));
 
             # The id returned in this next step may have a "+" character
             # that n2xdig() appended to it.  The checkchar() routine
@@ -1960,20 +2043,20 @@ NAAN:      $naan
 
             # Prepend NAAN and separator if there is a NAAN.
             #
-            if (!empty($$noid["$R/firstpart"])) {
-                $id = $$noid["$R/firstpart"] . $id;
+            if (dba_fetch("$R/firstpart", $noid)) {
+                $id = dba_fetch("$R/firstpart", $noid) . $id;
             }
 
             # Add check character if called for.
             #
-            if (!empty($$noid["$R/addcheckchar"])) {
+            if (dba_fetch("$R/addcheckchar", $noid)) {
                 $id = $this->checkchar($id);
             }
 
             # There may be a hold on an id, meaning that it is not to
             # be issued (or re-issued).
             #
-            if (isset($$noid["$id\t$R/h"])) {     # if there's a hold
+            if (dba_exists("$id\t$R/h", $noid)) {     # if there's a hold
                 continue;               # do _genid() again
             }
 
@@ -1995,10 +2078,10 @@ NAAN:      $naan
             # term is "long", log that we skipped this one.
             #
             if (substr($circ_svec, 0, 1) === 'q') {
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid,
                         sprintf("note: will not issue genid()'d %s as its status is 'q', circ_rec is %s",
-                            $id, $$noid["$id\t$R/c"]));
+                            $id, dba_fetch("$id\t$R/c", $noid)));
                 }
                 continue;
             }
@@ -2010,20 +2093,20 @@ NAAN:      $naan
             # and (b) it was placed in the queue (thus marked with 'q').
             #
             if (substr($circ_svec, 0, 1) === 'i'
-                        && ($$noid["$R/longterm"] || ! $$noid["$R/wrap"])
+                        && (dba_fetch("$R/longterm", $noid) || !dba_fetch("$R/wrap", $noid))
                 ) {
                 $this->logmsg($noid, sprintf('error: id %s cannot be re-issued except by going through the queue, circ_rec %s',
-                    $id, $$noid["$id\t$R/c"]));
+                    $id, dba_fetch("$id\t$R/c", $noid)));
                 continue;
             }
             if (substr($circ_svec, 0, 1) === 'u') {
                 $this->logmsg($noid, sprintf('note: generating id %s, currently marked as unqueued, circ record is %s',
-                    $id, $$noid["$id\t$R/c"]));
+                    $id, dba_fetch("$id\t$R/c", $noid)));
                 continue;
             }
             if (preg_match('/^([^iqu])/', $circ_svec, $matches)) {
                 $this->logmsg($noid, sprintf('error: id %s has unknown circulation status (%s), circ_rec %s',
-                    $id, $matches[1], $$noid["$id\\t$R/c"]));
+                    $id, $matches[1], dba_fetch("$id\\t$R/c", $noid)));
                 continue;
             }
             #
@@ -2048,7 +2131,7 @@ NAAN:      $naan
     /**
      * Record user (":/:/...") values in admin area.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $contact
      * @param string $key
      * @param string $value
@@ -2060,15 +2143,14 @@ NAAN:      $naan
 
         $db = $this->_opendbtab["bdb/$noid"];
         $this->_dblock();
-        $status = $db->db_put("$R/$R/$key", $value);
+        $status = dba_replace("$R/$R/$key", $value, $noid);
         $this->_dbunlock();
-        if ($$noid["$R/longterm"]) {
+        if (dba_fetch("$R/longterm", $noid)) {
             $this->logmsg($noid, sprintf('note: note attempt under %s by %s', $key, $contact)
                 . ($status ? '' : ' -- note failed'));
         }
-        if ($status) {
-            $error = error_get_last();
-            $this->addmsg($noid, sprintf('db->db_put status/errno (%s/%s)', $status, $error['message']));
+        if (!$status) {
+            $this->addmsg($noid, sprintf('dba_replace() error unknown.');
             return 0;
         }
         return 1;
@@ -2290,7 +2372,7 @@ NAAN:      $naan
      * Returns the array of corresponding strings (errors and "id:" strings)
      * or an empty array on error.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $contact
      * @param string $when
      * @param array $ids
@@ -2300,7 +2382,7 @@ NAAN:      $naan
     {
         $R = &$this->_R;
 
-        if (! $$noid["$R/template"]) {
+        if (!dba_fetch("$R/template", $noid)) {
             $this->addmsg($noid, 'error: queuing makes no sense in a bind-only minter.');
             return array();
         }
@@ -2341,7 +2423,7 @@ NAAN:      $naan
             # queue 85 days ago but wasn't selected because no one
             # minted anything in the last 85 days.
             #
-            $seqnum = $$noid["$R/fseqnum"];
+            $seqnum = dba_fetch("$R/fseqnum", $noid);
             #
             # NOTE: fseqnum is reset only when queue is empty; see mint().
             # If queue never empties fseqnum will simply keep growing,
@@ -2357,12 +2439,13 @@ NAAN:      $naan
         }
 
         if (!empty($qdate)) {     # current time plus optional delay
-            if ($qdate > $$noid["$R/gseqnum_date"]) {
-                $seqnum = $$noid["$R/gseqnum"] = self::SEQNUM_MIN;
-                $$noid["$R/gseqnum_date"] = $qdate;
+            if ($qdate > dba_fetch("$R/gseqnum_date", $noid)) {
+                $seqnum = self::SEQNUM_MIN;
+                dba_replace("$R/gseqnum", $seqnum, $noid);
+                dba_replace("$R/gseqnum_date", $qdate, $noid);
             }
             else {
-                $seqnum = $$noid["$R/gseqnum"];
+                $seqnum = dba_fetch("$R/gseqnum", $noid);
             }
         }
         else {
@@ -2370,7 +2453,7 @@ NAAN:      $naan
         }
 
         $iderror = '';
-        if ($$noid["$R/genonly"]) {
+        if (dba_fetch("$R/genonly", $noid)) {
             $iderror = $this->validate($noid, '-', $ids);
             if (substr($iderror, 0, 6) != 'error:') {
                 $iderror = '';
@@ -2381,8 +2464,8 @@ NAAN:      $naan
             return array();
         }
 
-        $firstpart = $$noid["$R/firstpart"];
-        $padwidth = $$noid["$R/padwidth"];
+        $firstpart = dba_fetch("$R/firstpart", $noid);
+        $padwidth = dba_fetch("$R/padwidth", $noid);
         $currdate = $this->_temper();
         $retvals = array();
         $m = null;
@@ -2390,7 +2473,7 @@ NAAN:      $naan
         $paddedid = null;
         $circ_svec = null;
         foreach ($ids as $id) {
-            if (isset($$noid["$id\t$R/h"])) {     # if there's a hold
+            if (dba_exists("$id\t$R/h", $noid)) {     # if there's a hold
                 $m = sprintf('error: a hold has been set for "%s" and must be released before the identifier can be queued for minting.', $id);
                 $this->logmsg($noid, $m);
                 $retvals[] = $m;
@@ -2405,21 +2488,21 @@ NAAN:      $naan
 
             if (substr($circ_svec, 0, 1) === 'q' && ! $delete) {
                 $m = sprintf('error: id %s cannot be queued since it appears to be in the queue already -- circ record is %s',
-                    $id, $$noid["$id\t$R/c"]);
+                    $id, dba_fetch("$id\t$R/c", $noid));
                 $this->logmsg($noid, $m);
                 $retvals[] = $m;
                 continue;
             }
             if (substr($circ_svec, 0, 1) === 'u' && $delete) {
                 $m = sprintf('error: id %s has been unqueued already -- circ record is %s',
-                    $id, $$noid["$id\t$R/c"]);
+                    $id, dba_fetch("$id\t$R/c", $noid));
                 $this->logmsg($noid, $m);
                 $retvals[] = $m;
                 continue;
             }
             if (substr($circ_svec, 0, 1) !== 'q' && $delete) {
                 $m = sprintf('error: id %s cannot be unqueued since its circ record does not indicate its being queued, circ record is %s',
-                    $id, $$noid["$id\t$R/c"]);
+                    $id, dba_fetch("$id\t$R/c", $noid));
                 $this->logmsg($noid, $m);
                 $retvals[] = $m;
                 continue;
@@ -2427,13 +2510,13 @@ NAAN:      $naan
             # If we get here and we're deleting, circ_svec must be 'q'.
 
             if ($circ_svec === '') {
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid,
                         sprintf('note: id %s being queued before first minting (to be pre-cycled)', $id));
                 }
             }
             elseif (substr($circ_svec, 0, 1) === 'i') {
-                if ($$noid["$R/longterm"]) {
+                if (dba_fetch("$R/longterm", $noid)) {
                     $this->logmsg($noid, sprintf('note: longterm id %s being queued for re-issue', $id));
                 }
             }
@@ -2449,25 +2532,26 @@ NAAN:      $naan
 
             $this->_dblock();
 
-            $$noid["$R/queued"]++;
-            if ($$noid["$R/total"] != self::NOLIMIT   # if total is non-zero
-                    && $$noid["$R/queued"] > $$noid["$R/oatop"]
+            dba_replace("$R/queued", dba_fetch("$R/queued", $noid) + 1, $noid);
+            if (dba_fetch("$R/total", $noid) != self::NOLIMIT   # if total is non-zero
+                    && dba_fetch("$R/queued", $noid) > dba_fetch("$R/oatop", $noid)
                 ) {
 
                 $this->_dbunlock();
 
-                $m = sprintf('error: queue count (%s) exceeding total possible on id %s.  Queue operation aborted.', $$noid["$R/queued"], $id);
+                $m = sprintf('error: queue count (%s) exceeding total possible on id %s.  Queue operation aborted.',
+                    dba_fetch("$R/queued", $noid), $id);
                 $this->logmsg($noid, $m);
                 $retvals[] = $m;
                 break;
             }
-            $$noid["$R/q/$qdate/$fixsqn/$paddedid"] = $id;
+            dba_replace("$R/q/$qdate/$fixsqn/$paddedid", $id, $noid);
 
             $this->_dbunlock();
 
-            if ($$noid["$R/longterm"]) {
+            if (dba_fetch("$R/longterm", $noid)) {
                 $this->logmsg($noid, sprintf('id: %s added to queue under %s',
-                    $$noid["$R/q/$qdate/$fixsqn/$paddedid"], $R/q/$qdate/$seqnum/$paddedid));
+                    dba_fetch("$R/q/$qdate/$fixsqn/$paddedid", $noid), "$R/q/$qdate/$seqnum/$paddedid"));
             }
             $retvals[] = sprintf('id: %s', $id);
             if ($seqnum) {     # it's zero for "lvf" and "delete"
@@ -2477,10 +2561,10 @@ NAAN:      $naan
 
         $this->_dblock();
         if ($when === 'first') {
-            $$noid["$R/fseqnum"] = $seqnum;
+            dba_replace("$R/fseqnum", $seqnum, $noid);
         }
         elseif ($qdate > 0) {
-            $$noid["$R/gseqnum"] = $seqnum;
+            dba_replace("$R/gseqnum", $seqnum, $noid);
         }
         $this->_dbunlock();
 
@@ -2490,7 +2574,7 @@ NAAN:      $naan
     /**
      * Generate a sample id for testing purposes.
      *
-     * @param string $noid
+     * @param resource $noid
      * @param integer $num
      * @return string
      */
@@ -2500,16 +2584,16 @@ NAAN:      $naan
 
         $upper = null;
         if (empty($num)) {
-            $upper = $$noid["$R/total"];
+            $upper = dba_fetch("$R/total", $noid);
             if ($upper == self::NOLIMIT) {
                 $upper = 100000;
             }
             $num = intval(rand(0, $upper));
         }
-        $mask = $$noid["$R/mask"];
-        $firstpart = $$noid["$R/firstpart"];
+        $mask = dba_fetch("$R/mask", $noid);
+        $firstpart = dba_fetch("$R/firstpart", $noid);
         $result = $firstpart . $this->n2xdig($num, $mask);
-        return $$noid["$R/addcheckchar"]
+        return dba_fetch("$R/addcheckchar", $noid)
             ? $this->checkchar($result)
             : $result;
     }
@@ -2517,29 +2601,29 @@ NAAN:      $naan
     /**
      * Scopes.
      *
-     * @param string $noid
+     * @param resource $noid
      * @return integer 1
      */
     public function scope($noid)
     {
         $R = &$this->_R;
 
-        if (! $$noid["$R/template"]) {
+        if (!dba_fetch("$R/template", $noid)) {
             print 'This minter does not generate identifiers, but it does accept user-defined identifier and element bindings.' . PHP_EOL;
         }
-        $total = $$noid["$R/total"];
+        $total = dba_fetch("$R/total", $noid);
         $totalstr = $this->_human_num($total);
-        $naan = $$noid["$R/naan"] ?: '';
+        $naan = dba_fetch("$R/naan", $noid) ?: '';
         if ($naan) {
             $naan .= '/';
         }
 
-        $prefix = $$noid["$R/prefix"];
-        $mask = $$noid["$R/mask"];
-        $gen_type = $$noid["$R/generator_type"];
+        $prefix = dba_fetch("$R/prefix", $noid);
+        $mask = dba_fetch("$R/mask", $noid);
+        $gen_type = dba_fetch("$R/generator_type", $noid);
 
         print sprintf('Template %s will yield %s %s unique ids',
-            $$noid["$R/template"], $total < 0 ? 'an unbounded number of' : $totalstr, $gen_type) . PHP_EOL;
+            dba_fetch("$R/template", $noid), $total < 0 ? 'an unbounded number of' : $totalstr, $gen_type) . PHP_EOL;
         $tminus1 = $total < 0 ? 987654321 : $total - 1;
 
         # See if we need to compute a check character.
@@ -2552,7 +2636,7 @@ NAAN:      $naan
         }
         foreach ($results as $n => &$xdig) {
             $xdig = $naan . $this->n2xdig($n, $mask);
-            if ($$noid["$R/addcheckchar"]) {
+            if (dba_fetch("$R/addcheckchar", $noid)) {
                 $xdig = $this->checkchar($result);
             }
         }
@@ -2601,7 +2685,7 @@ NAAN:      $naan
      * that were passed in.  Error strings # that pertain to identifiers
      * begin with "iderr: ".
      *
-     * @param string $noid
+     * @param resource $noid
      * @param string $template
      * @param array $ids
      * @return array
@@ -2628,10 +2712,10 @@ NAAN:      $naan
         }
 
         if ($template === '-') {
-            $prefix = $$noid["$R/prefix"];
-            $mask = $$noid["$R/mask"];
-            # $retvals[] = sprintf('template: %s', $$noid["$R/template"]));
-            if (! $$noid["$R/template"]) {  # do blanket validation
+            $prefix = dba_fetch("$R/prefix", $noid);
+            $mask = dba_fetch("$R/mask", $noid);
+            # $retvals[] = sprintf('template: %s', dba_fetch("$R/template", $noid)));
+            if (! dba_fetch("$R/template", $noid)) {  # do blanket validation
                 $nonulls = array_filter(preg_replace('/^(.)/', 'id: $1', $ids));
                 if (empty($nonulls)) {
                     return array();
@@ -2652,7 +2736,7 @@ NAAN:      $naan
         $varpart = null;
         $m = substr($mask, -1) === 'k' ? substr($mask, -1) : $mask;
         $should_have_checkchar = $m !== $mask;
-        $naan = $$noid["$R/naan"];
+        $naan = dba_fetch("$R/naan", $noid);
         foreach ($ids as $id) {
             if (empty($id) || trim($id) == '') {
                 $retvals[] = "iderr: can't validate an empty identifier";
