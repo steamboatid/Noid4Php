@@ -5,6 +5,8 @@
  * @package Noid
  */
 
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'NoidTestCase.php';
+
 /**
  * Tests for Noid (2).
  *
@@ -30,33 +32,8 @@
  *
  * ------------------------------------
  */
-class Noid2Test extends PHPUnit_Framework_TestCase
+class Noid2Test extends NoidTestCase
 {
-    public $dir;
-    public $rm_cmd;
-    public $noid_cmd;
-    public $noid_dir;
-
-    public function setUp()
-    {
-        $this->dir = getcwd();
-        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
-        $noid_bin = 'blib/script/noid';
-        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
-        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
-        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
-
-        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
-    }
-
-    public function tearDown()
-    {
-        $dbname = $this->noid_dir . 'noid.bdb';
-        if (file_exists($dbname)) {
-            Noid::dbclose($dbname);
-        }
-    }
-
     public function testNoid2()
     {
         # Start off by doing a dbcreate.
@@ -119,27 +96,5 @@ class Noid2Test extends PHPUnit_Framework_TestCase
         # echo 'line 3 of "' . $this->noid_dir . 'log" correct';
         $this->assertTrue((boolean) preg_match('/^id: 13030\/tst27h added to queue under :\/q\//', $log_lines[3]));
         # echo 'line 4 of "' . $this->noid_dir . 'log" correct';
-    }
-
-    protected function _executeCommand($cmd, &$status, &$output, &$errors)
-    {
-        // Using proc_open() instead of exec() avoids an issue: current working
-        // directory cannot be set properly via exec().  Note that exec() works
-        // fine when executing in the web environment but fails in CLI.
-        $descriptorSpec = array(
-            0 => array('pipe', 'r'), //STDIN
-            1 => array('pipe', 'w'), //STDOUT
-            2 => array('pipe', 'w'), //STDERR
-        );
-        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
-            $output = stream_get_contents($pipes[1]);
-            $errors = stream_get_contents($pipes[2]);
-            foreach ($pipes as $pipe) {
-                fclose($pipe);
-            }
-            $status = proc_close($proc);
-        } else {
-            throw new Exception("Failed to execute command: $cmd.");
-        }
     }
 }

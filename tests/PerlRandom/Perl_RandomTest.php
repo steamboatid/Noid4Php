@@ -23,7 +23,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
             );
         }
 
-        require_once dirname(__DIR__)
+        require_once dirname(dirname(__DIR__))
             . DIRECTORY_SEPARATOR . 'lib'
             . DIRECTORY_SEPARATOR . 'Perl_Random.php';
     }

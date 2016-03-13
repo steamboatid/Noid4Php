@@ -5,6 +5,8 @@
  * @package Noid
  */
 
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'NoidTestCase.php';
+
 /**
  * Tests for Noid (7).
  *
@@ -35,34 +37,13 @@
  *
  * ------------------------------------
  */
-class Noid7Test extends PHPUnit_Framework_TestCase
+class Noid7Test extends NoidTestCase
 {
-    public $dir;
-    public $rm_cmd;
-    public $noid_cmd;
-    public $noid_dir;
-
     public function setUp()
     {
-        $this->dir = getcwd();
-        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
-        $noid_bin = 'blib/script/noid';
-        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
-        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
-        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
-
-        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
-
+        parent::setUp();
         # Seed the random number generator.
         srand(time());
-    }
-
-    public function tearDown()
-    {
-        $dbname = $this->noid_dir . 'noid.bdb';
-        if (file_exists($dbname)) {
-            Noid::dbclose($dbname);
-        }
     }
 
     public function testNoid7()
@@ -241,74 +222,6 @@ class Noid7Test extends PHPUnit_Framework_TestCase
         for ($i = 1; $i <= 9; $i++) {
             $this->assertEquals($value2[$i], $noid_output[$i + 2]);
             # echo 'line ' . $i + 3 . ' of "fetch" output for noid 2';
-        }
-    }
-
-    /**
-     * Subroutine to generate a random string of (sort of) random length.
-     *
-     * @return string
-     */
-    protected function _random_string()
-    {
-        $to_choose_from =
-            'ABCDEFGHIJKLMNOPQRSTUVWXYZ' .
-            'abcdefghijklmnopqrstuvwxyz' .
-            '0123456789';
-        $building_string = '';
-
-        # Calculate the string length.  First, get a fractional number that's
-        # between 0 and 1 but never 1.
-        $string_length = (float) mt_rand() / (float) (mt_getrandmax() - 1);
-        # Multiply it by 48, so that it's between 0 and 48, but never 48.
-        $string_length *= 48;
-        # Throw away the fractional part, leaving an integer between 0 and 47.
-        $string_length = intval($string_length);
-        # Add 3 to give us a number between 3 and 50.
-        $string_length += 3;
-
-        for ($i = 0; $i < $string_length; $i++) {
-            # Calculate an integer between 0 and ((length of
-            # $to_choose_from) - 1).
-            # First, get a fractional number that's between 0 and 1,
-            # but never 1.
-            $to_choose_index = (float) mt_rand() / (float) (mt_getrandmax() - 1);
-            # Multiply it by the length of $to_choose_from, to get
-            # a number that's between 0 and (length of $to_choose_from),
-            # but never (length of $choose_from);
-            $to_choose_index *= strlen($to_choose_from);
-            # Throw away the fractional part to get an integer that's
-            # between 0 and ((length of $to_choose_from) - 1).
-            $to_choose_index = intval($to_choose_index);
-
-            # Fetch the character at that index into $to_choose_from,
-            # and append it to the end of the string we're building.
-            $building_string .= substr($to_choose_from, $to_choose_index, 1);
-        }
-
-        # Return our construction.
-        return $building_string;
-    }
-
-    protected function _executeCommand($cmd, &$status, &$output, &$errors)
-    {
-        // Using proc_open() instead of exec() avoids an issue: current working
-        // directory cannot be set properly via exec().  Note that exec() works
-        // fine when executing in the web environment but fails in CLI.
-        $descriptorSpec = array(
-            0 => array('pipe', 'r'), //STDIN
-            1 => array('pipe', 'w'), //STDOUT
-            2 => array('pipe', 'w'), //STDERR
-        );
-        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
-            $output = stream_get_contents($pipes[1]);
-            $errors = stream_get_contents($pipes[2]);
-            foreach ($pipes as $pipe) {
-                fclose($pipe);
-            }
-            $status = proc_close($proc);
-        } else {
-            throw new Exception("Failed to execute command: $cmd.");
         }
     }
 }

@@ -4,37 +4,14 @@
  * @package Noid
  */
 
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'NoidTestCase.php';
+
 /**
  * Tests for Noid: create a template with 3721 noids, and mint them all, until a
  * duplicate is found (none!).
  */
-class TemplateLongTest extends PHPUnit_Framework_TestCase
+class TemplateLongTest extends NoidTestCase
 {
-    public $dir;
-    public $rm_cmd;
-    public $noid_cmd;
-    public $noid_dir;
-
-    public function setUp()
-    {
-        $this->dir = getcwd();
-        $this->rm_cmd = "/bin/rm -rf {$this->dir}/NOID > /dev/null 2>&1 ";
-        $noid_bin = 'blib/script/noid';
-        $cmd = is_executable($noid_bin) ? $noid_bin : $this->dir . DIRECTORY_SEPARATOR . 'noid';
-        $this->noid_cmd = $cmd . ' -f ' . $this->dir . ' ';
-        $this->noid_dir = $this->dir . DIRECTORY_SEPARATOR . 'NOID' . DIRECTORY_SEPARATOR;
-
-        require_once dirname($cmd) . DIRECTORY_SEPARATOR . 'lib'. DIRECTORY_SEPARATOR . 'Noid.php';
-    }
-
-    public function tearDown()
-    {
-        $dbname = $this->noid_dir . 'noid.bdb';
-        if (file_exists($dbname)) {
-            Noid::dbclose($dbname);
-        }
-    }
-
     public function testLong()
     {
         $total = 3721;
@@ -71,6 +48,7 @@ class TemplateLongTest extends PHPUnit_Framework_TestCase
         $contact = 'Fester Bestertester';
 
         $ids = array();
+        fwrite(STDERR, PHP_EOL);
         for ($i = 1; $i <= $total; $i++) {
             $id = Noid::mint($noid, $contact, '');
             // The assertion is called separately to process it quickly.
@@ -90,27 +68,5 @@ class TemplateLongTest extends PHPUnit_Framework_TestCase
         # Try to mint another, after they are exhausted.
         $id = Noid::mint($noid, $contact, '');
         $this->assertEmpty($id);
-    }
-
-    protected function _executeCommand($cmd, &$status, &$output, &$errors)
-    {
-        // Using proc_open() instead of exec() avoids an issue: current working
-        // directory cannot be set properly via exec().  Note that exec() works
-        // fine when executing in the web environment but fails in CLI.
-        $descriptorSpec = array(
-            0 => array('pipe', 'r'), //STDIN
-            1 => array('pipe', 'w'), //STDOUT
-            2 => array('pipe', 'w'), //STDERR
-        );
-        if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
-            $output = stream_get_contents($pipes[1]);
-            $errors = stream_get_contents($pipes[2]);
-            foreach ($pipes as $pipe) {
-                fclose($pipe);
-            }
-            $status = proc_close($proc);
-        } else {
-            throw new Exception("Failed to execute command: $cmd.");
-        }
     }
 }
