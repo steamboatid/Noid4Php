@@ -464,7 +464,7 @@ class Noid
             ) {
             return;
         }
-        elseif (empty($id)) {
+        elseif (strlen($id) == 0) {
             self::addmsg($noid, 'error: bind needs an identifier specified.');
             return;
         }
@@ -627,7 +627,7 @@ class Noid
     {
         self::init();
 
-        if (empty($id)) {
+        if (strlen($id) == 0) {
             return;
         }
 
@@ -709,7 +709,7 @@ class Noid
      * @param string $subnaa
      * @return string|null
      */
-    static public function dbcreate($dbdir, $contact, $template, $term, $naan, $naa, $subnaa)
+    static public function dbcreate($dbdir, $contact, $template = null, $term = '-', $naan = '', $naa = '', $subnaa = '')
     {
         self::init();
 
@@ -717,8 +717,8 @@ class Noid
 
         $total = null;
         $noid = null;
-        $dir = "$dbdir/NOID";
-        $dbname = "$dir/noid.bdb";
+        $dir = ($dbdir == '.' ? getcwd() : $dbdir) . DIRECTORY_SEPARATOR . 'NOID';
+        $dbname = $dir . DIRECTORY_SEPARATOR . 'noid.bdb';
         # yyy try to use "die" to communicate to caller (graceful?)
         # yyy how come tie doesn't complain if it exists already?
 
@@ -953,11 +953,11 @@ class Noid
             $p);
         $random_sample = null;          # null on purpose
         if ($total == self::NOLIMIT) {
-            $random_sample = intval(rand(0, 10)); # first sample less than 10
+            $random_sample = rand(0, 9); # first sample less than 10
         }
         $sample1 = self::sample($noid, $random_sample);
         if ($total == self::NOLIMIT) {
-            $random_sample = intval(rand(0, 100000)); # second sample bigger
+            $random_sample = rand(0, 100000); # second sample bigger
         }
         $sample2 = self::sample($noid, $random_sample);
 
@@ -1131,19 +1131,22 @@ NAAN:      $naan
 
         // For compatibility purpose between perl and php.
         switch ($flags) {
+            case self::DB_WRITE:
+            // Note: With switch, an empty flag matches with self::BDB_RDWR.
+            case $flags === self::BDB_RDWR:
+                $flags = self::DB_WRITE;
+                break;
             case self::DB_RDONLY:
             case self::BDB_RDONLY:
-            default:
                 $flags = self::DB_RDONLY;
                 break;
             case self::DB_CREATE:
             case self::BDB_CREATE:
                 $flags = self::DB_CREATE;
                 break;
-            case self::DB_WRITE:
-            case self::BDB_RDWR:
-                $flags = self::DB_WRITE;
-                break;
+            default:
+                self::addmsg(null, sprintf('"%s" is not a regular flag', $flag));
+                return;
         }
 
         # yyy to test: can we now open more than one noid at once?
@@ -1393,7 +1396,7 @@ NAAN:      $naan
 
         $R = &self::$_R;
 
-        if (empty($id)) {
+        if (strlen($id) == 0) {
             self::addmsg($noid, sprintf('error: %s requires that an identifier be specified.', $verbose ? 'fetch' : 'get'));
             return;
         }
@@ -1537,25 +1540,27 @@ NAAN:      $naan
 
         # If we get here, the generator must be of type "random".
         #
-        $saclist = explode(' ', dba_fetch("$R/saclist", $db));
+        $saclist = dba_fetch("$R/saclist", $db);
+        $saclist = explode(' ', trim($saclist));
+
         $len = count($saclist);
         if ($len < 1) {
             self::_dbunlock();
             self::addmsg($noid, sprintf('error: no active counters panic, but %s identifiers left?', $oacounter));
             return;
         }
-        $randn = intval(rand(0, $len));    # pick a specific counter name
+        $randn = rand(0, $len - 1);    # pick a specific counter name
         $sctrn = $saclist[$randn];   # at random; then pull its $n
         $n = substr($sctrn, 1);  # numeric equivalent from the name
         #print "randn=$randn, sctrn=$sctrn, counter n=$n\t";
-        $sctr = dba_fetch("$R/${sctrn}/value", $db); # and get its value
+        $sctr = dba_fetch("$R/$sctrn/value", $db); # and get its value
         $sctr++;                # increment and
-        dba_replace("$R/${sctrn}/value", $sctr, $db);    # store new current value
+        dba_replace("$R/$sctrn/value", $sctr, $db);    # store new current value
         dba_replace("$R/oacounter", dba_fetch("$R/oacounter", $db) + 1, $db);       # incr overall counter - some
                             # redundancy for sanity's sake
 
         # deal with an exhausted subcounter
-        if ($sctr >= dba_fetch("$R/${sctrn}/top", $db)) {
+        if ($sctr >= dba_fetch("$R/$sctrn/top", $db)) {
             $c = '';
             $modsaclist ='';
             # remove from active counters list
@@ -1615,7 +1620,7 @@ NAAN:      $naan
         # need at the beginning of the string (without splitting it).
         # Let errors hit the log file rather than bothering the caller.
         #
-        $circ_svec = explode('|', $circ_rec);
+        $circ_svec = explode('|', trim($circ_rec));
         $circ_svec = reset($circ_svec);
 
         if (empty($circ_svec)) {
@@ -2020,8 +2025,8 @@ NAAN:      $naan
         $pctr = dba_fetch("$R/percounter", $db);
         $saclist = '';
         while ($t > 0) {
-            dba_replace("$R/c${n}/top", $t >= $pctr ? $pctr : $t, $db);
-            dba_replace("$R/c${n}/value", 0, $db);       # yyy or 1?
+            dba_replace("$R/c$n/top", $t >= $pctr ? $pctr : $t, $db);
+            dba_replace("$R/c$n/value", 0, $db);       # yyy or 1?
             $saclist .= "c$n ";
             $t -= $pctr;
             $n++;
@@ -2115,7 +2120,7 @@ NAAN:      $naan
             #
             dba_delete($key, $db);
             dba_replace("$R/queued", dba_fetch("$R/queued", $db) - 1, $db);
-            if (dba_fetch("$R/queued", $db) <= 0) {
+            if (dba_fetch("$R/queued", $db) < 0) {
                 $m = sprintf('error: queued count (%s) going negative on id %s', dba_fetch("$R/queued", $db), $id);
                 self::addmsg($noid, $m);
                 self::logmsg($noid, $m);
@@ -2351,7 +2356,8 @@ NAAN:      $naan
         while ($num != 0 || ! $varwidth) {
             if (! $varwidth) {
                 $c = array_shift($rmask);  # check next mask character,
-                if (is_null($c)
+                // Avoid to str_split() an empty value.
+                if (strlen($c) == 0
                         || $c === 'r'
                         || $c === 's'
                     ) { # terminate on r or s even if
@@ -2449,7 +2455,8 @@ NAAN:      $naan
         #
         $has_cc = substr($mask, -1) === 'k';
         foreach (str_split($prefix) as $c) {
-            if ($has_cc && $c !== '/' && ! isset(self::$_ordxdig[$c])) {
+            // strlen() avoid an issue with str_split() when there is no prefix.
+            if (strlen($c) && $has_cc && $c !== '/' && ! isset(self::$_ordxdig[$c])) {
                 $msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
                     self::$legalstring);
                 return 0;
@@ -2475,6 +2482,10 @@ NAAN:      $naan
 
         $total = 1;
         foreach (str_split($mask) as $c) {
+            // Avoid to str_split() an empty mask.
+            if (strlen($c) == 0) {
+                break;
+            }
             # Mask chars it could be are: d e k
             if ($c === 'e') {
                 $total *= self::$alphacount;
@@ -2649,7 +2660,6 @@ NAAN:      $naan
         $padwidth = dba_fetch("$R/padwidth", $db);
         $currdate = self::_temper();
         $retvals = array();
-        $m = null;
         $idval = null;
         $paddedid = null;
         $circ_svec = null;
@@ -2759,7 +2769,7 @@ NAAN:      $naan
      * @param integer $num
      * @return string
      */
-    static public function sample($noid, $num)
+    static public function sample($noid, $num = null)
     {
         self::init();
 
@@ -2771,12 +2781,12 @@ NAAN:      $naan
         }
 
         $upper = null;
-        if (empty($num)) {
+        if (is_null($num)) {
             $upper = dba_fetch("$R/total", $db);
             if ($upper == self::NOLIMIT) {
                 $upper = 100000;
             }
-            $num = intval(rand(0, $upper));
+            $num = rand(0, $upper - 1);
         }
         $mask = dba_fetch("$R/mask", $db);
         $firstpart = dba_fetch("$R/firstpart", $db);
@@ -2931,8 +2941,6 @@ NAAN:      $naan
             return array();
         }
 
-        $id = null;
-        $c = null;
         $m = preg_replace('/k$/', '', $mask);
         $should_have_checkchar = $m !== $mask;
         $naan = dba_fetch("$R/naan", $db);
@@ -2960,7 +2968,7 @@ NAAN:      $naan
             }
             $first .= $prefix;          # ... if any
             $varpart = preg_replace('/^' . preg_quote($first, '/') . '/', '', $id);
-            if (strpos($id, $first) !== 0) {
+            if (strlen($first) > 0 && strpos($id, $first) !== 0) {
             # yyy            ($varpart = $id) !~ s/^$prefix// and
                 $retvals[] = sprintf('iderr: %s should begin with %s.', $id, $first);
                 continue;
@@ -2987,6 +2995,10 @@ NAAN:      $naan
             array_shift($maskchars);       # toss 'r', 's', or 'z'
             $flagBreakContinue = false;
             foreach (str_split($varpart) as $c) {
+                // Avoid to str_split() an empty varpart.
+                if (strlen($c) == 0) {
+                    break;
+                }
                 $m = array_shift($maskchars);
                 if (is_null($m)) {
                     $retvals[] = sprintf('iderr: %s longer than specified template (%s)', $id, $template);
