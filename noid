@@ -460,24 +460,25 @@ class NoidDo
 
             # Ignore any leading lines that start with a pound sign
             # or contain nothing but white space.
-            while (scalar(@input_lines) > 0) {
-                if ((substr($input_lines[0], 0, 1) == '#') ||
-                    ($input_lines[0] =~ /^\s*$/)) {
-                    shift @input_lines;
-                    next;
-                    }
-                last;
+            while (count($input_lines) > 0) {
+                if (substr($input_lines[0], 0, 1) == '#'
+                        || trim($input_lines[0]) == ''
+                    ) {
+                    array_shift($input_lines);
+                    continue;
                 }
+                break;
+            }
 
             # If we don't have any lines, there's a problem.
-            if (scalar(@input_lines) == 0) {
+            if (count($input_lines) == 0) {
                 fwrite($stderr, 'error:  no non-blank, non-comment input.' . PHP_EOL);
                 Noid::dbclose($noid);
                 return 0;
             }
 
             # There must be an element and a colon on the first line.
-            unless ($input_lines[0] =~ /^\s*(\w+)\s*:\s*(.*)$/) {
+            if (!preg_match('/^\s*(\w+)\s*:\s*(.*)$/', $input_lines[0])) {
                 fwrite($stderr, 'error:  missing element or colon on first non-blank, non-comment line.' . PHP_EOL);
                 Noid::dbclose($noid);
                 return 0;
@@ -506,7 +507,7 @@ class NoidDo
         # yyy eg, :fragment:Offset:Length:Path
         # yyy eg, :file:Path
         # yyy eg, ":xml",
-        elseif ($elem =~ /^:/) {
+        elseif (strpos($elem, ':') === 0) {
             fwrite($stderr, sprintf('Binding to element syntax "%s" not supported.', $elem) . PHP_EOL);
             Noid::dbclose($noid);
             return 0;
@@ -694,24 +695,24 @@ class NoidDo
     /**
      * Mint a noid.
      *
-     * @param string $n
+     * @param integer $n
      * @param string $elem
      * @param string $value
      * @param boolean $pepper
      * @return string
      */
-    public function mint($n, $elem, $value, $pepper = false)
+    public function mint($n = null, $elem, $value, $pepper = false)
     {
         global $stderr;
 
-        if (defined($pepper)) {
+        if ($pepper) {
             fwrite($stderr,
                 'The peppermint command is not implemented yet.' . PHP_EOL);
             return 0;
         }
-        if (! defined($n) || $n !~ /^\d+$/) {
+        if (is_null($n) || !is_numeric($n)) {
             fwrite($stderr, sprintf('Argument error: expected positive integer, got %s',
-                defined($n) ? $n : 'nothing') . PHP_EOL);
+                !is_null($n) ? $n : 'nothing') . PHP_EOL);
             $this->usage(1, 1, 'mint');
             return 0;
         }
