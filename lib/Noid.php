@@ -659,12 +659,12 @@ class Noid
         # Create log and logbdb files from scratch and make them writable
         # before calling dbopen().
         #
-        if (! $this->_storefile("$dir/log", '') || ! chmod(0666, "$dir/log")) {
+        if (!$this->_storefile("$dir/log", '') || !chmod("$dir/log", 0666)) {
             $error = error_get_last();
             $this->addmsg(null, sprintf("Couldn't chmod log file: %s", $error['message']));
             return;
         }
-        if (! $this->_storefile("$dir/logbdb", '') || ! chmod(0666, "$dir/logbdb")) {
+        if (!$this->_storefile("$dir/logbdb", '') || !chmod("$dir/logbdb", 0666)) {
             $error = error_get_last();
             $this->addmsg(null, sprintf("Couldn't chmod logbdb file: %s", $error['message']));
             return;
