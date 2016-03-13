@@ -390,11 +390,11 @@ class NoidDo
             local $/;            # disappears when scope exits.
             $/ = PHP_EOL . PHP_EOL;            # Means paragraph mode.
             my $para = <STDIN> || '';
-            chop $para;    # yyy needed?
-            $para =~ s/^#.*\n//g;        # remove comment lines
-            $para =~ s/\n\s+/ /g;        # merge continuation lines
-            my @elemvals = split(/^([^:]+)\s*:\s*/m, $para);
-            shift @elemvals;        # throw away first null
+            $para = trim($para);    # yyy needed?
+            $para = preg_replace('/^#.*\n/g', '', $para); # remove comment lines
+            $para = preg_replace('/\n\s+/g', ' ', $para); # merge continuation lines
+            $elemvals = preg_split('/^([^:]+)\s*:\s*/m', $para);
+            array_shift($elemvals);        # throw away first null
             my ($bound, $total) = (0, 0);
             while (1) {
                 ($elem, $value) = (shift @elemvals, shift @elemvals);
@@ -411,7 +411,7 @@ class NoidDo
                     $value = '';
                 }
                 else {
-                    chop $value;
+                    trim($value);
                 }
                 $report = Noid::bind($noid, $contact, $validate,
                     $how, $id, $elem, $value);
@@ -437,8 +437,10 @@ class NoidDo
                 return 0;
             }
     #        while (<STDIN>) {
-    #            next if /^#/ || /^\s*\n/;
-    #            last;        # end at first non-blank, non-comment
+    #            if ('/^#/' || '/^\s*\n/') {
+    #                continue;
+    #            }
+    #            break; # end at first non-blank, non-comment
     #        }
     #        chop;
     #        if (! defined($_)|| ! s/^(\w+)\s*:\s*//) {
