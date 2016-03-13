@@ -177,6 +177,46 @@ class NoidBindTest extends PHPUnit_Framework_TestCase
         Noid::dbclose($noid);
     }
 
+    /**
+     * Validate tests for unlimited sequences -- short
+     */
+    public function testValidateUnlimited()
+    {
+        $erc = $this->_short('fk.zde');
+        $regex = '/Size:\s*unlimited\n/';
+        $this->assertNotEmpty(preg_match($regex, $erc));
+        # echo '4-digit random';
+
+        $noid = Noid::dbopen($this->noid_dir . 'noid.bdb', 0);
+        $contact = 'Fester Bestertester';
+
+        $id = Noid::mint($noid, $contact, '');
+        $this->assertEquals('fk00', $id);
+        # echo 'mint first';
+
+        $result = Noid::validate($noid, '-', 'fk9w');
+        $regex = '/error: /';
+        $this->assertEquals(0, preg_match($regex, $result[0]));
+        # echo 'validate just minted';
+
+        $result = Noid::validate($noid, '-', 'fkw9');
+        $regex = '/iderr: /';
+        $this->assertEquals(1, preg_match($regex, $result[0]));
+        # echo 'validate just minted';
+
+        $result = Noid::validate($noid, '-', 'fk9w5');
+        $regex = '/iderr: /';
+        $this->assertEquals(0, preg_match($regex, $result[0]));
+        # echo 'detect one digit off';
+
+        $result = Noid::validate($noid, '-', 'fk9wh');
+        $regex = '/iderr: /';
+        $this->assertEquals(1, preg_match($regex, $result[0]));
+        # echo 'detect transposition';
+
+        Noid::dbclose($noid);
+    }
+
     protected function _executeCommand($cmd, &$status, &$output, &$errors)
     {
         // Using proc_open() instead of exec() avoids an issue: current working

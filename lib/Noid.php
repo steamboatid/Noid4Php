@@ -3097,7 +3097,8 @@ NAAN:      $naan
             # Maskchar-by-Idchar checking.
             #
             $maskchars = str_split($mask);
-            array_shift($maskchars);       # toss 'r', 's', or 'z'
+            $mode = array_shift($maskchars);       # toss 'r', 's', or 'z'
+            $suppl = $mode == 'z' ? $maskchars[0] : null;
             $flagBreakContinue = false;
             foreach (str_split($varpart) as $c) {
                 // Avoid to str_split() an empty varpart.
@@ -3106,9 +3107,12 @@ NAAN:      $naan
                 }
                 $m = array_shift($maskchars);
                 if (is_null($m)) {
-                    $retvals[] = sprintf('iderr: %s longer than specified template (%s)', $id, $template);
-                    $flagBreakContinue = true;
-                    break;
+                    if ($mode != 'z') {
+                        $retvals[] = sprintf('iderr: %s longer than specified template (%s)', $id, $template);
+                        $flagBreakContinue = true;
+                        break;
+                    }
+                    $m = $suppl;
                 }
                 if ($m === 'e' && strpos(self::$legalstring, $c) === false) {
                     $retvals[] = sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (extended digit)',
