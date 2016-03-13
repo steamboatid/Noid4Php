@@ -227,7 +227,7 @@ class Noid
     public function addmsg($noid, $message)
     {
         $noid = $noid ?: ''; # act like a global in case $noid undefined
-        $this->_opendbtab{"msg/$noid"} .= $message . "\n";
+        $this->_opendbtab{"msg/$noid"} .= $message . PHP_EOL;
         return 1;
     }
 
@@ -260,7 +260,7 @@ class Noid
         $noid = $noid ?: ''; # act like a global in case $noid undefined
         my $logfhandle = $this->_opendbtab{"log/$noid"};
         defined($logfhandle) and
-            print("$logfhandle $message\n");
+            print($logfhandle . ' ' . $message . PHP_EOL);
         # yyy file was opened for append -- hopefully that means always
         #     append even if others have appended to it since our last append;
         #     possible sync problems...
@@ -316,11 +316,11 @@ class Noid
                 return(undef)
         or
         ! defined($id) || $id === '' and
-            addmsg($noid, 'error: bind needs an identifier specified.'),
+            $this->addmsg($noid, 'error: bind needs an identifier specified.'),
             return(undef)
         ;
         ! defined($elem) || $elem === '' and
-            addmsg($noid, qq@error: "bind $how" requires an element name.@),
+            $this->addmsg($noid, sprintf('error: "bind %s" requires an element name.', $how)),
             return(undef);
 
         # Transform and place a "hold" (if "long" term and we're not deleting)
@@ -336,8 +336,7 @@ class Noid
         my ($oid, $oelem, $hold) = ($id, $elem, 0);
         if ($id =~ /^:/) {
             $id !~ m|^:idmap/(.+)| and
-                addmsg($noid, qq@error: $oid: id cannot begin with ":"@
-                    . qq@ unless of the form ":idmap/Idpattern".@),
+                $this->addmsg($noid, sprintf('error: %s: id cannot begin with ":" unless of the form ":idmap/Idpattern".', $oid)),
                 return(undef);
             ($id, $elem) = ("$R/idmap/$oelem", $1);
             $$noid{"$R/longterm"} and
@@ -351,47 +350,39 @@ class Noid
         # If no circ record and no hold...
         if (! defined($$noid{"$id\t$R/c"}) && ! exists($$noid{"$id\t$R/h"})) {
             $$noid{"$R/longterm"} and
-                addmsg($noid, "error: "
-                    . qq@$oid: "long" term disallows binding @
-                    . "an unissued identifier unless a hold is "
-                    . "first placed on it."),
+                $this->addmsg($noid, sprintf('error: %s: "long" term disallows binding an unissued identifier unless a hold is first placed on it.', $oid)),
                 return(undef)
             or
-                logmsg($noid, "warning:"
-                    . " $oid: binding an unissued identifier"
-                    . " that has no hold placed on it.")
-            ;
+                $this->logmsg($noid, sprintf('warning: %s: binding an unissued identifier that has no hold placed on it.', $oid));
         }
         if (grep(/^$how$/, @valid_hows) != 1) {
-            addmsg($noid, "error: bind how?  What does $how mean?");
+            $this->addmsg($noid, sprintf('error: bind how?  What does %s mean?', $how));
             return(undef);
         }
         my $peppermint = ($how === 'peppermint');
         $peppermint and
             # yyy to do
-            addmsg($noid, qq@error: bind 'peppermint' not implemented.@),
+            $this->addmsg($noid, 'error: bind "peppermint" not implemented.'),
             return(undef);
         # YYY bind mint file Elem Value     -- put into FILE by itself
         # YYY bind mint stuff_into_big_file Elem Value -- cat into file
         if ($how === 'mint' || $how === 'peppermint') {
             $id !== 'new' and
-                addmsg(qq@error: bind "mint" requires id to be @
-                    . qq@given as "new".@),
+                $this->addmsg($noid, 'error: bind "mint" requires id to be given as "new".'),
                 return(undef);
             ! ($id = $oid = mint($noid, $contact, $peppermint)) and
                 return(undef);
         }
         $how === 'delete' || $how === 'purge' and
             (defined($value) && $value === '' and
-                addmsg($noid, qq@error: why does "bind $how" @
-                    . "have a supplied value ($value)?"),
+                $this->addmsg($noid, sprintf('error: why does "bind %s" have a supplied value (%s)?"', $how, $value)),
                 return(undef)),
             $value = '',
             1
         or
         ! defined($value) and
-            addmsg($noid,
-                qq@error: "bind $how $elem" requires a value to bind.@),
+            $this->addmsg($noid,
+                sprintf('error: "bind %s %s" requires a value to bind.', $how, $elem),
             return(undef)
         ;
         # If we get here, $value is defined and we can use with impunity.
@@ -399,16 +390,14 @@ class Noid
         dblock();
         if (! defined($$noid{"$id\t$elem"})) {      # currently unbound
             grep(/^$how$/, qw( replace append prepend delete )) == 1 and
-                addmsg($noid, qq@error: for "bind $how", "$oid $oelem" @
-                    . "must already be bound."),
+                $this->addmsg($noid, sprintf('error: for "bind %s", "%s %s" must already be bound.', $how, $oid, $oelem)),
                 dbunlock(),
                 return(undef);
             $$noid{"$id\t$elem"} = '';  # can concatenate with impunity
         }
         else {                      # currently bound
             grep(/^$how$/, qw( new mint peppermint )) == 1 and
-                addmsg($noid, qq@error: for "bind $how", "$oid $oelem" @
-                    . " cannot already be bound."),
+                $this->addmsg($noid, sprintf('error: for "bind %s", "%s %s" cannot already be bound.', $how, $oid, $oelem)),
                 dbunlock(),
                 return(undef);
         }
@@ -445,7 +434,7 @@ class Noid
             "Id:      $id
             Element: $elem
             Bind:    $how
-            Status:  " . ($hold == -1 ? errmsg($noid) : "ok, $statmsg") . "\n"
+            Status:  " . ($hold == -1 ? $this->errmsg($noid) : 'ok, ' . $statmsg) . PHP_EOL
         );
     }
 
@@ -565,42 +554,39 @@ class Noid
         # yyy try to use "die" to communicate to caller (graceful?)
         # yyy how come tie doesn't complain if it exists already?
 
-        -e $dbname and
-            addmsg(undef, "error: a NOID database already exists in "
-                . ($dbdir !== '.' ? "\"$dbdir\"."
-                    : "the current directory.") . "\n"
-                . "\tTo permit creation of a new minter, rename\n"
-                . "\tor remove the entire NOID subdirectory."),
+        if (file_exists($dbname)) {
+            self::addmsg(null, sprintf('error: a NOID database already exists in %s.',
+                    ($dbdir === '.' ? 'the current directory' : '"' . $dbdir . '"')). PHP_EOL
+                . "\t" . 'To permit creation of a new minter, rename' . PHP_EOL
+                . "\t" . 'or remove the entire NOID subdirectory.'),
             return(undef);
         ! -d $dir && ! mkdir($dir) and
-            addmsg(undef, "error: couldn't create database directory\n"
-                . "$dir: $!\n"),
+            $this->addmsg(undef, sprintf("error: couldn't create database directory %s: %s", $dir, $!)),
             return(undef);
 
         my ($prefix, $mask, $gen_type, $msg, $genonly);
         ! defined($template) and
             $genonly = 0,
-            $template = ".zd"
+            $template = '.zd'
         or
             $genonly = 1,           # not generated ids only
         ;
         $total = parse_template($template, $prefix, $mask, $gen_type, $msg);
         ! $total and
-            addmsg($noid, $msg),
+            $this->addmsg($noid, $msg),
             return(undef);
-        my $synonym = "noid" . ($genonly ? "_$msg" : "any");
+        my $synonym = 'noid' . ($genonly ? '_' . $msg : 'any');
 
         # Type check various parameters.
         #
         ! defined($contact) || $contact !~ /\S/ and
-            addmsg($noid, "error: contact ($contact) must be non-empty."),
+            $this->addmsg($noid, sprintf('error: contact (%s) must be non-empty.', $contact),
             return(undef);
 
         $term = $term ?: '-';
         $term !== 'long' && $term !== 'medium'
                 && $term !== '-' && $term !== 'short' and
-            addmsg($noid, "error: term ($term) must be either "
-                . qq@"long", "medium", '-', or "short".@),
+            $this->addmsg($noid, sprintf('error: term (%s) must be either "long", "medium", "-", or "short".', $term)),
             return(undef);
 
         ! defined($naa) and $naa = '';
@@ -609,33 +595,30 @@ class Noid
 
         $term === 'long' &&
             ($naan !~ /\S/ || $naa !~ /\S/ || $subnaa !~ /\S/) and
-                addmsg($noid, qq@error: longterm identifiers require @
-                    . "an NAA Number, NAA, and SubNAA."),
+                $this->addmsg($noid, sprintf('error: longterm identifiers require an NAA Number, NAA, and SubNAA.')),
                 return(undef);
         # xxx should be able to check naa and naan live against registry
         # yyy code should invite to apply for NAAN by email to ark@cdlib.org
         # yyy ARK only? why not DOI/handle?
         $term === 'long' && ($naan !~ /\d\d\d\d\d/) and
-            addmsg($noid, qq@error: term of "long" requires a @
-                . "5-digit NAAN (00000 if none), and non-empty "
-                . "string values for NAA and SubNAA."),
+            $this->addmsg($noid, sprintf('error: term of "long" requires a 5-digit NAAN (00000 if none), and non-empty string values for NAA and SubNAA.')),
             return(undef);
 
         # Create log and logbdb files from scratch and make them writable
         # before calling dbopen().
         #
         ! storefile("$dir/log", '') || ! chmod(0666, "$dir/log") and
-            addmsg(undef, "Couldn't chmod log file: $!"),
+            $this->addmsg(undef, sprintf("Couldn't chmod log file: %s", $!)),
             return(undef);
         ! storefile("$dir/logbdb", '') || ! chmod(0666, "$dir/logbdb") and
-            addmsg(undef, "Couldn't chmod logbdb file: $!"),
+            $this->addmsg(undef, sprintf("Couldn't chmod logbdb file: %s", $!)),
             return(undef);
         ! ($noid = dbopen($dbname, DB_CREATE)) and
-            addmsg(undef, "can't create database file: $!"),
+            $this->addmsg(undef, sprintf("can't create database file: %s", $!)),
             return(undef);
-        logmsg($noid, ($template ?
-            qq@Creating database for template "$template".@
-            : "Creating database for bind-only minter."));
+        $this->logmsg($noid, $template
+            ? sprintf('Creating database for template "%s".', $template)
+            : sprintf('Creating database for bind-only minter.'));
 
         # Database info
         # yyy should be using db-> ops directly (for efficiency and?)
@@ -650,7 +633,7 @@ class Noid
         $$noid{"$R/template"} = $template;
         $$noid{"$R/prefix"} = $prefix;
         $$noid{"$R/mask"} = $mask;
-        $$noid{"$R/firstpart"} = ($naan ? $naan . "/" : '') . $prefix;
+        $$noid{"$R/firstpart"} = ($naan ? $naan . '/' : '') . $prefix;
         $$noid{"$R/addcheckchar"} = ($mask =~ /k$/);    # boolean answer
 
         $$noid{"$R/generator_type"} = $gen_type;
@@ -734,7 +717,7 @@ class Noid
         my $host = hostname();
 
         #   my $child_process_id;
-        #   unless (defined($child_process_id = open(CHILD, "-|"))) {
+        #   unless (defined($child_process_id = open(CHILD, '-|'))) {
         #       die "unable to start child process, $!, stopped";
         #       }
         #   if ($child_process_id == 0) {
@@ -767,9 +750,10 @@ class Noid
 
         # Create a human- and machine-readable report.
         #
-        my @p = split('//', $properties);         # split into letters
-        s/-/_ not/ || s/./_____/
-            for (@p);
+        $p = str_split($properties);         # split into letters
+        $p = array_map(
+            function ($v) { return $v == '-' ? '_ not' : '_____'; },
+            $p);
         my $random_sample;          # undefined on purpose
         $total == self::NOLIMIT and
             $random_sample = int(rand(10)); # first sample less than 10
@@ -778,57 +762,58 @@ class Noid
             $random_sample = int(rand(100000)); # second sample bigger
         my $sample2 = sample($noid, $random_sample);
 
-        my $htotal = ($total == self::NOLIMIT ? "unlimited" : human_num($total));
-        my $what = ($total == self::NOLIMIT ? "unlimited" : $total)
-            . qq@ $gen_type identifiers of form $template
-        A Noid minting and binding database has been created that will bind
-        @
-            . ($genonly ? '' : "any identifier ") . "and mint "
-            . ($total == self::NOLIMIT ? qq@an unbounded number of identifiers
-        with the template "$template".@
-            : $htotal . qq@ identifiers with the template "$template".@)
-            . qq@
-        Sample identifiers would be "$sample1" and "$sample2".
-        Minting order is $gen_type.@;
+        my $htotal = $total == self::NOLIMIT ? 'unlimited' : human_num($total);
+        my $what = ($total == self::NOLIMIT ? 'unlimited' : $total)
+            . ' ' . sprintf('%s identifiers of form %s', $gen_type, $template) . PHP_EOL
+            . '       ' . 'A Noid minting and binding database has been created that will bind ' . PHP_EOL
+            . '       ' . ($genonly ? '' : 'any identifier ') . 'and mint ' . ($total == self::NOLIMIT
+                ? sprintf('an unbounded number of identifiers') . PHP_EOL
+                    . '       '
+                : sprintf('%s identifiers', $htotal) . ' ')
+            . sprintf('with the template "%s".', $template) . PHP_EOL
+            . '       ' . sprintf('Sample identifiers would be "%s" and "%s".', $sample1, $sample2) . PHP_EOL
+            . '       ' . sprintf('Minting order is %s.', $gen_type);
 
-        $$noid{"$R/erc"} = qq@<<<EOD
-# Creation record for the identifier generator in NOID/noid.bdb.
+        $$noid{"$R/erc"} =
+"# Creation record for the identifier generator in NOID/noid.bdb.
 #
 erc:
 who:       $contact
 what:      $what
-when:      @ . temper() . qq@
+when:      " . temper() . "
 where:     $host:$cwd
-Version:   Noid {self::VERSION}
-Size:      @ . ($total == self::NOLIMIT ? "unlimited" : $total) . qq@
-Template:  @ . (! $template ? "(:none)" : $template . qq@
-    A suggested parent directory for this template is "$synonym".  Note:
-    separate minters need separate directories, and templates can suggest
-    short names; e.g., the template "xz.redek" suggests the parent directory
-    "noid_xz4" since identifiers are "xz" followed by 4 characters.@) . qq@
+Version:   Noid " . self::VERSION . "
+Size:      " . ($total == self::NOLIMIT ? "unlimited" : $total) . "
+Template:  " . (!$template
+                 ? '(:none)'
+                 : $template . "
+       A suggested parent directory for this template is \"$synonym\".  Note:
+       separate minters need separate directories, and templates can suggest
+       short names; e.g., the template \"xz.redek\" suggests the parent directory
+       \"noid_xz4\" since identifiers are \"xz\" followed by 4 characters.") . "
 Policy:    (:$properties)
-    This minter's durability summary is (maximum possible being "GRANITE")
-        "$properties", which breaks down, property by property, as follows.
-        ^^^^^^^
-        |||||||_$p[6] (E)lided of vowels to avoid creating words by accident
-        ||||||_$p[5] (T)ranscription safe due to a generated check character
-        |||||_$p[4] (I)mpression safe from ignorable typesetter-added hyphens
-        ||||_$p[3] (N)on-reassignable in life of Name Assigning Authority
-        |||_$p[2] (A)lphabetic-run-limited to pairs to avoid acronyms
-        ||_$p[1] (R)andomly sequenced to avoid series semantics
-        |_$p[0] (G)lobally unique within a registered namespace (currently
-                    tests only ARK namespaces; apply for one at ark@
-        . '@' . qq@cdlib.org)
+       This minter's durability summary is (maximum possible being \"GRANITE\")
+         \"$properties\", which breaks down, property by property, as follows.
+          ^^^^^^^
+          |||||||_$p[6] (E)lided of vowels to avoid creating words by accident
+          ||||||_$p[5] (T)ranscription safe due to a generated check character
+          |||||_$p[4] (I)mpression safe from ignorable typesetter-added hyphens
+          ||||_$p[3] (N)on-reassignable in life of Name Assigning Authority
+          |||_$p[2] (A)lphabetic-run-limited to pairs to avoid acronyms
+          ||_$p[1] (R)andomly sequenced to avoid series semantics
+          |_$p[0] (G)lobally unique within a registered namespace (currently
+                     tests only ARK namespaces; apply for one at ark@cdlib.org)
 Authority: $naa | $subnaa
 NAAN:      $naan
-EOD;
+";
+
         ! storefile("$dir/README", $$noid{"$R/erc"})
             and return(undef);
         # yyy useful for quick info on a minter from just doing 'ls NOID'??
         #          storefile("$dir/T=$prefix.$mask", "foo\n");
 
-        my $report = qq@Created:   minter for $what  @
-            . qq@See $dir/README for details.\n@;
+        my $report = sprintf('Created:   minter for %s', $what)
+            . '  ' . sprintf('See %s/README for details.', $dir) . PHP_EOL;
 
         ! $template and
             dbclose($noid),
@@ -857,27 +842,27 @@ EOD;
         my $cursor = $db->db_cursor();
         my ($key, $value) = ("$R/", 0);
         if ($level === 'dump') {
-            print "$key: $value\n"
+            print "$key: $value" . PHP_EOL
                 while ($cursor->c_get($key, $value, DB_NEXT) == 0);
             return 1;
         }
         my $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         if ($status) {
-            addmsg($noid, "c_get status/errno ($status/$!)");
+            $this->addmsg($noid, sprintf('c_get status/errno (%s/%s)', $status, $!));
             return 0;
         }
         if ($key =~ m|^$R/$R/|) {
-            print "User Assigned Values\n";
-            print "  $key: $value\n";
+            print 'User Assigned Values' . PHP_EOL;
+            print "  $key: $value" . PHP_EOL;
             while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
                 last
                     if ($key !~ m|^$R/$R/|);
                 print "  $key: $value\n";
             }
-            print "\n";
+            print PHP_EOL;
         }
-        print "Admin Values\n";
-        print "  $key: $value\n";
+        print 'Admin Values' . PHP_EOL;
+        print "  $key: $value" . PHP_EOL;
         while ($cursor->c_get($key, $value, DB_NEXT) == 0) {
             last
                 if ($key !~ m|^$R/|);
@@ -887,7 +872,7 @@ EOD;
                     $key !~ m|^$R/saclist| &&
                     $key !~ m|^$R/recycle/|);
         }
-        print "\n";
+        print PHP_EOL;
         undef $cursor;
         return 1;
     }
@@ -931,7 +916,7 @@ EOD;
         my ($env, $envhome);
         ($envhome = $dbname) =~ s|[^/]+$||; # path ending in "NOID/"
         ! -d $envhome and
-            addmsg(undef, "$envhome not a directory"),
+            $this->addmsg(undef, sprintf('%s not a directory', $envhome)),
             return undef;
         # yyy probably these envflags are overkill right now
         my $envflags = DB_INIT_LOCK | DB_INIT_TXN | DB_INIT_MPOOL;
@@ -948,16 +933,16 @@ EOD;
         #
         my ($logfile, $logfhandle, $log_opened, $logbdb);
 
-        $logfile = $envhome . "log";
-        $log_opened = open($logfhandle, ">>$logfile");
-        $logbdb = $envhome . "logbdb";
+        $logfile = $envhome . 'log';
+        $log_opened = open($logfhandle, '>>' . $logfile);
+        $logbdb = $envhome . 'logbdb';
         -w $logbdb and
             push(@envargs, ( -ErrFile => $logbdb ));
         # yyy should we complain if can't open log file?
 
         $env = new BerkeleyDB::Env @envargs;
         ! defined($env) and
-            addmsg(undef, "no \"Env\" object ($BerkeleyDB::Error)"),
+            $this->addmsg(undef, sprintf('no "Env" object (%s)', $BerkeleyDB::Error)),
             return undef;
 
         #=for deleting
@@ -965,21 +950,21 @@ EOD;
         #   print "OK so far\n"; exit(0);
         #   if ($flags && DB_CREATE) {
         #       # initialize environment files
-        #       print "envhome=$envhome\n";
+        #       print sprintf('envhome=%s', $envhome) . PHP_EOL;
         #       $env = new BerkeleyDB::Env @envargs;
         #       ! defined($env) and
-        #           addmsg(undef,
-        #               "no \"Env\" object ($BerkeleyDB::Error)"),
+        #           $this->addmsg(undef,
+        #               sprintf('no "Env" object (%s)', $BerkeleyDB::Error)),
         #           return undef;
         #   }
         #   else {
-        #       print "flags=$flags\n";
+        #       print sprintf('flags=%s', $flags) . PHP_EOL;
         #   }
-        #   print "OK so far\n"; exit(0);
+        #   print 'OK so far' . PHP_EOL; exit(0);
         #   $env = new BerkeleyDB::Env @envargs;
         #   unless (defined($env)) {
-        #       die "unable to get a \"BerkeleyDB::Env\" object ($BerkeleyDB::Error), stopped";
-        #       }
+        #       die sprintf('unable to get a "BerkeleyDB::Env" object (%s), stopped', $BerkeleyDB::Error);
+        #   }
         #
         #=cut
 
@@ -994,24 +979,24 @@ EOD;
         my $locktype = (($flags & DB_RDONLY) ? LOCK_SH : LOCK_EX);
 
         ! sysopen(NOIDLOCK, $lockfile, O_RDWR | O_CREAT) and
-            addmsg(undef, "cannot open \"$lockfile\": $!"),
+            $this->addmsg(undef, sprintf('cannot open "%s": %s', $lockfile, $!),
             return undef;
         eval {
 
-            local $SIG{ALRM} = sub { die("lock timeout after $timeout "
-                . "seconds; consider removing \"$lockfile\"\n")
+            local $SIG{ALRM} = sub {
+                 die(sprintf('lock timeout after %s seconds; consider removing "%s"', $timeout, $lockfile) . PHP_EOL);
             };
             alarm $timeout;     # alarm goes off in $timeout seconds
             eval {  # yyy if system has no flock, say in dbcreate profile?
                 flock(NOIDLOCK, $locktype)  # blocking lock
-                    or die("cannot flock: $!");
+                    or die(sprintf('cannot flock: %s'; $!));
             };
             alarm 0;        # cancel the alarm
             die $@ if $@;       # re-raise the exception
         };
         alarm 0;            # race condition protection
         if ($@) {           # re-raise the exception
-            addmsg(undef, "error: $@");
+            $this->addmsg(undef, sprintf('error: %s', $@));
             return undef;
         }
 
@@ -1020,7 +1005,7 @@ EOD;
                 -Flags => $flags,
         ## yyy  -Property => DB_DUP,
                 -Env => $env)
-            or addmsg(undef, "tie failed on $dbname: $BerkeleyDB::Error")
+            or $this->addmsg(undef, sprintf('tie failed on %s: %s', $dbname, $BerkeleyDB::Error))
                 and return undef;
         # yyy how to set error code or return string?
         #   or die("Can't open database file: $!\n");
@@ -1030,7 +1015,7 @@ EOD;
         $this->_opendbtab{"log/$noid"} = ($log_opened ? $logfhandle : undef);
 
         $locktest and
-            print("locktest: holding lock for $locktest seconds...\n"),
+            print(sprintf('locktest: holding lock for %s seconds...', $locktest) . PHP_EOL),
             sleep($locktest);
 
         return $noid;
@@ -1122,16 +1107,15 @@ EOD;
         $R = &$this->_R;
 
         ! defined($id) and
-            addmsg($noid, "error: " . ($verbose ? "fetch" : "get")
-                . " requires that an identifier be specified."),
+            $this->addmsg($noid, sprintf('error: %s requires that an identifier be specified.', $verbose ? 'fetch' : 'get')),
             return(undef);
 
         my ($hdr, $retval) = ('', '');
         $verbose and $hdr = "id:    $id"
-            . (exists($$noid{"$id\t$R/h"}) ? " hold" : '') . "\n"
-            . (validate($noid, '-', $id) ? '' : errmsg($noid) . "\n")
+            . (exists($$noid{"$id\t$R/h"}) ? ' hold ': '') . PHP_EOL
+            . (validate($noid, '-', $id) ? '' : $this->errmsg($noid) . PHP_EOL)
             . "Circ:  " . ($$noid{"$id\t$R/c"}
-                ? $$noid{"$id\t$R/c"} : "uncirculated") . "\n";
+                ? $$noid{"$id\t$R/c"} : 'uncirculated') . PHP_EOL;
 
         my $db = $this->_opendbtab{"bdb/$noid"};
         my $cursor = $db->db_cursor();
@@ -1162,7 +1146,7 @@ EOD;
             }
             undef($cursor);
             ! $retval and
-                addmsg($noid, $hdr
+                $this->addmsg($noid, $hdr
                     . "note: no elements bound under $id."),
                 return(undef);
             return($hdr . $retval);
@@ -1179,11 +1163,12 @@ EOD;
             or
                 $idmapped = id2elemval($cursor, $verbose, $id, $elem),
                 ($verbose and
-                    $retval .= ($idmapped ? "$idmapped\nnote: "
-                        . "previous result produced by :idmap\n"
-                        : qq@error: "$id $elem" is not bound.\n@)
+                    $retval .= ($idmapped
+                            ? $dmapped . PHP_EOL . 'note: previous result produced by :idmap'
+                            : sprintf('error: "%s %s" is not bound.', $id, $elem)
+                        . PHP_EOL
                 or
-                    $retval .= "$idmapped\n"
+                    $retval .= $idmapped . PHP_EOL
                 )
             ;
         }
@@ -1227,15 +1212,13 @@ EOD;
             #
             if ($$noid{"$R/longterm"} || ! $$noid{"$R/wrap"}) {
                 dbunlock();
-                my $m = "error: identifiers exhausted (stopped at "
-                    . $$noid{"$R/oatop"} . ").";
-                addmsg($noid, $m);
-                logmsg($noid, $m);
+                my $m = sprintf('error: identifiers exhausted (stopped at %s).', $$noid{"$R/oatop"});
+                $this->addmsg($noid, $m);
+                $this->logmsg($noid, $m);
                 return undef;
             }
             # If we get here, term is not "long".
-            logmsg($noid, temper() . ": Resetting counter to zero; "
-                . "previously issued identifiers will be re-issued");
+            $this->logmsg($noid, sprintf('%s: Resetting counter to zero; previously issued identifiers will be re-issued', temper()));
             if ($$noid{"$R/generator_type"} === 'sequential') {
                 $$noid{"$R/oacounter"} = 0;
             }
@@ -1260,8 +1243,7 @@ EOD;
         my $len = (my @saclist = split('/ /', $$noid{"$R/saclist"}));
         if ($len < 1) {
             dbunlock();
-            addmsg($noid, "error: no active counters panic, "
-                . "but $oacounter identifiers left?");
+            $this->addmsg($noid, sprintf('error: no active counters panic, but %s identifiers left?', $oacounter));
             return undef;
         }
         my $randn = int(rand($len));    # pick a specific counter name
@@ -1329,13 +1311,10 @@ EOD;
         my $circ_svec = (split('/\|/', $circ_rec))[0];
 
         ! defined($circ_svec) || $circ_svec === '' and
-            logmsg($noid, "error: id $id has no circ status vector -- "
-                . "circ record is $circ_rec"),
+            $this->logmsg($noid, sprintf('error: id %s has no circ status vector -- circ record is %s', $id, $circ_rec)),
             return '';
         $circ_svec !~ /^([iqu])[iqu]*$/ and
-            logmsg($noid, "error: id $id has a circ status vector "
-                . "containing letters other than 'i', "
-                . "'q', or 'u' -- circ record is $circ_rec"),
+            $this->logmsg($noid, sprintf('error: id %s has a circ status vector containing letters other than "i", "q", or "u" -- circ record is %s', $id, $circ_rec)),
             return '';
         return $1;
     }
@@ -1390,8 +1369,7 @@ EOD;
         # longterm identifiers are in effect.
         #
         $$noid{"$R/longterm"} and
-            logmsg($noid, "m: $circ_rec"
-                . ($status ? '' : " -- hold failed"));
+            $this->logmsg($noid, sprintf('m: %s%s', $circ_rec, $status ? '' : ' -- hold failed'));
 
         ! $status and           # must be an error in hold_set()
             return(undef);
@@ -1458,20 +1436,20 @@ EOD;
 
         # yyy what makes sense in this case?
         #! $$noid{"$R/template"} and
-        #   addmsg($noid,
-        #       "error: holding makes no sense in a bind-only minter."),
+        #   $this->addmsg($noid,
+        #       'error: holding makes no sense in a bind-only minter.'),
         #   return(0);
         ! defined($contact) and
-            addmsg($noid, "error: contact undefined"),
+            $this->addmsg($noid, "error: contact undefined"),
             return(0);
         ! defined($on_off) and
-            addmsg($noid, qq@error: hold "set" or "release"?@),
+            $this->addmsg($noid, 'error: hold "set" or "release"?'),
             return(0);
-        ! @ids and
-            addmsg($noid, qq@error: no Id(s) specified@),
+        ! empty($ids) and
+            $this->addmsg($noid, 'error: no Id(s) specified'),
             return(0);
         $on_off !== 'set' && $on_off !== 'release' and
-            addmsg($noid, "error: unrecognized hold directive ($on_off)"),
+            $this->addmsg($noid, sprintf('error: unrecognized hold directive (%s)', $on_off)),
             return(0);
 
         my $release = $on_off === 'release';
@@ -1481,20 +1459,19 @@ EOD;
             ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
                 $iderror = '';
         $iderror and
-            addmsg($noid, "error: hold operation not started -- one or "
-                . "more ids did not validate:\n$iderror"),
+            $this->addmsg($noid, sprintf('error: hold operation not started -- one or more ids did not validate: %s', PHP_EOL . $iderror),
             return(0);
         my $status;
         my $n = 0;
         for my $id (@ids) {
             if ($release) {     # no hold means key doesn't exist
-                logmsg($noid, temper() . " $id: releasing hold")
+                $this->logmsg($noid, sprintf('%s %s: releasing hold', temper(), $id))
                     if ($$noid{"$R/longterm"});
                 dblock();
                 $status = hold_release($noid, $id);
             }
             else {          # "hold" means key exists
-                logmsg($noid, temper() . " $id: placing hold")
+                $this->logmsg($noid, sprintf('%s %s: placing hold', temper(), $id))
                     if ($$noid{"$R/longterm"});
                 dblock();
                 $status = hold_set($noid, $id);
@@ -1512,7 +1489,7 @@ EOD;
             #     "reserved for future use" or "reserved, never issued"
             #
         }
-        addmsg($noid, "ok: $n hold" . ($n == 1 ? '' : "s") . " placed");
+        $this->addmsg($noid, $n == 1 ? sprintf('ok: 1 hold placed') : sprintf('ok: %s holds placed', $n));
         return(1);
     }
 
@@ -1534,10 +1511,9 @@ EOD;
         $$noid{"$R/held"}++;
         if ($$noid{"$R/total"} != self::NOLIMIT   # ie, if total is non-zero
                 && $$noid{"$R/held"} > $$noid{"$R/oatop"}) {
-            my $m = "error: hold count (" . $$noid{"$R/held"}
-                . ") exceeding total possible on id $id";
-            addmsg($noid, $m);
-            logmsg($noid, $m);
+            $m = sprintf('error: hold count (%s) exceeding total possible on id %s', $$noid{"$R/held"}, $id);
+            $this->addmsg($noid, $m);
+            $this->logmsg($noid, $m);
             return(0);
         }
         return(1);
@@ -1560,10 +1536,9 @@ EOD;
         delete($$noid{"$id\t$R/h"});
         $$noid{"$R/held"}--;
         if ($$noid{"$R/held"} < 0) {
-            my $m = "error: hold count (" . $$noid{"$R/held"}
-                . ") going negative on id $id";
-            addmsg($noid, $m);
-            logmsg($noid, $m);
+            my $m = sprintf('error: hold count (%s) going negative on id %s', $$noid{"$R/held"}, $id);
+            $this->addmsg($noid, $m);
+            $this->logmsg($noid, $m);
             return(0);
         }
         return(1);
@@ -1579,7 +1554,7 @@ EOD;
     protected function human_num($num)
     {
         $num = $num ?: 0;
-        my $numstr = sprintf("%u", $num);
+        my $numstr = sprintf('%d', $num);
         if ($numstr =~ /^\d\d\d\d+$/) {     # if num is 4 or more digits
             $numstr .= ",";         # prepare to add commas
             while ($numstr =~ s/(\d)(\d\d\d,)/$1,$2/) {};
@@ -1605,7 +1580,7 @@ EOD;
         my ($key, $value) = ($first, 0);
         my $status = $cursor->c_get($key, $value, DB_SET_RANGE);
         $status and
-            return "error: id2elemval: c_get status/errno ($status/$!)";
+            return sprintf('error: id2elemval: c_get status/errno (%s/%s)', $status, $!);
         $key !~ /^$first/ and
             return '';
         my ($pattern, $newval);
@@ -1613,12 +1588,12 @@ EOD;
             ($pattern) = ($key =~ m|$first(.+)|);
             $newval = $id;
             defined($pattern) and
-                # yyy kludgy use of unlikely delimiters
-                (eval '$newval =~ ' . qq@s$pattern$value@ and
+                # yyy kludgy use of unlikely delimiters (ascii 05: Enquiry)
+                (eval $newval . '  =~ ' . "s$pattern$value" and
                     # replaced, so return
-                    return ($verbose ? "$elem: " : '') . $newval),
+                    return ($verbose ? $elem . ': ' : '') . $newval),
                 ($@ and
-                    return "error: id2elemval eval: $@")
+                    return sprintf('error: id2elemval eval: %s'; $@))
                 ;
             $cursor->c_get($key, $value, DB_NEXT) != 0 and
                 return '';
@@ -1660,7 +1635,7 @@ EOD;
         # -- no subdirectories too unevenly loaded.  That's the hope anyway.
 
         $$noid{"$R/percounter"} =   # max per counter, last has fewer
-            int($total / $maxcounters + 1);     # round up to be > 0
+            intval($total / $maxcounters + 1);     # round up to be > 0
 
         my $n = 0;
         my $t = $total;
@@ -1707,13 +1682,11 @@ EOD;
         $R = &$this->_R;
 
         ! defined($contact) and
-            addmsg($noid, "contact undefined"),
+            $this->addmsg($noid, 'contact undefined'),
             return undef;
 
         ! $$noid{"$R/template"} and
-            addmsg($noid, "error: this minter does not generate "
-                . "identifiers (it does accept user-defined "
-                . "identifier and element bindings)."),
+            $this->addmsg($noid, 'error: this minter does not generate identifiers (it does accept user-defined identifier and element bindings).'),
             return undef;
         # Check if the head of the queue is ripe.  See comments under queue()
         # for an explanation of how the queue works.
@@ -1722,7 +1695,7 @@ EOD;
         my $first = "$R/q/";
         my $db = $this->_opendbtab{"bdb/$noid"};
         ! (my $cursor = $db->db_cursor()) and
-            addmsg($noid, "couldn't create cursor"),
+            $this->addmsg($noid, "couldn't create cursor"),
             return undef;
 
         # The following is not a proper loop.  Normally it should run once,
@@ -1736,7 +1709,7 @@ EOD;
             $key = $first;
             $status = $cursor->c_get($key, $id, DB_SET_RANGE);
             $status and
-                addmsg($noid, "mint: c_get status/errno ($status/$!)"),
+                $this->addmsg($noid, sprintf('mint: c_get status/errno (%s/%s)', $status, $!)),
                 return undef;
             # The cursor, key and value are now set at the first item
             # whose key is greater than or equal to $first.  If the
@@ -1758,10 +1731,9 @@ EOD;
             #
             $db->db_del($key);
             if ($$noid{"$R/queued"}-- <= 0) {
-                my $m = "error: queued count (" . $$noid{"$R/queued"}
-                    . ") going negative on id $id";
-                addmsg($noid, $m);
-                logmsg($noid, $m);
+                my $m = sprintf('error: queued count (%s) going negative on id %s', $$noid{"$R/queued"}, $id);
+                $this->addmsg($noid, $m);
+                $this->logmsg($noid, $m);
                 return(undef);
             }
 
@@ -1770,30 +1742,27 @@ EOD;
             # remove it from the queue and check the queue again.
             #
             exists($$noid{"$id\t$R/h"}) and     # if there's a hold
-                $$noid{"$R/longterm"} && logmsg($noid, "warning: id "
-                    . "$id found in queue with a hold placed on "
-                    . "it -- removed from queue."),
+                $$noid{"$R/longterm"} && $this->logmsg($noid,
+                    sprintf('warning: id %s found in queue with a hold placed on it -- removed from queue.', $id)),
                 next;
             # yyy this means id on "hold" can still have a 'q' circ status?
 
             $circ_svec = get_circ_svec($noid, $id);
 
             $circ_svec =~ /^i/ and
-                logmsg($noid, "error: id $id appears to have been "
-                    . "issued while still in the queue -- "
-                    . "circ record is " . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid,
+                    sprintf('error: id %s appears to have been issued while still in the queue -- circ record is %s',
+                        $id, $$noid{"$id\t$R/c"})),
                 next
             ;
             $circ_svec =~ /^u/ and
-                logmsg($noid, "note: id $id, marked as unqueued, is "
-                    . "now being removed/skipped in the queue -- "
-                    . "circ record is " . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, sprintf('note: id %s, marked as unqueued, is now being removed/skipped in the queue -- circ record is %s',
+                    $id, $$noid{"$id\t$R/c"})),
                 next
             ;
             $circ_svec =~ /^([^q])/ and
-                logmsg($noid, "error: id $id found in queue has an "
-                    . "unknown circ status ($1) -- "
-                    . "circ record is " . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, sprintf('error: id %s found in queue has an unknown circ status ($1) -- circ record is %s',
+                    $id, $$noid{"$id\t$R/c"})),
                 next
             ;
 
@@ -1802,9 +1771,8 @@ EOD;
             # would normally be minted.  Log if term is "long".
             #
             $circ_svec === '' and
-                ($$noid{"$R/longterm"} && logmsg($noid, "note: "
-                    . "queued id $id coming out of queue on first "
-                    . "minting (pre-cycled)"))
+                ($$noid{"$R/longterm"} && $this->logmsg($noid,
+                    sprintf('note: queued id %s coming out of queue on first minting (pre-cycled)', $id))
             ;
 
             # If we get here, our identifier has now passed its tests.
@@ -1876,10 +1844,9 @@ EOD;
             # term is "long", log that we skipped this one.
             #
             $circ_svec =~ /^q/ and
-                ($$noid{"$R/longterm"} && logmsg($noid,
-                    "note: will not issue genid()'d $id as it's "
-                    . "status is 'q', circ_rec is "
-                    . $$noid{"$id\t$R/c"})),
+                ($$noid{"$R/longterm"} && $this->logmsg($noid,
+                    sprintf("note: will not issue genid()'d %s as its status is 'q', circ_rec is %s",
+                        $id, $$noid{"$id\t$R/c"}))),
                 next
             ;
 
@@ -1891,21 +1858,18 @@ EOD;
             #
             $circ_svec =~ /^i/ && ($$noid{"$R/longterm"}
                         || ! $$noid{"$R/wrap"}) and
-                logmsg($noid, "error: id $id cannot be "
-                    . "re-issued except by going through the "
-                    . "queue, circ_rec " . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, sprintf('error: id %s cannot be re-issued except by going through the queue, circ_rec %s',
+                    $id, $$noid{"$id\t$R/c"})),
                 next
             ;
             $circ_svec =~ /^u/ and
-                logmsg($noid, "note: generating id $id, currently "
-                    . "marked as unqueued, circ record is "
-                    . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, sprintf('note: generating id %s, currently marked as unqueued, circ record is %s',
+                    $id, $$noid{"$id\t$R/c"})),
                 next
             ;
             $circ_svec =~ /^([^iqu])/ and
-                logmsg($noid, "error: id $id has unknown circulation "
-                    . "status ($1), circ_rec "
-                    . $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, sprintf('error: id %s has unknown circulation status (%s), circ_rec %s';
+                    $id, $1, $$noid{"$id\t$R/c"})),
                 next
             ;
             #
@@ -1946,10 +1910,10 @@ EOD;
         my $status = $db->db_put("$R/$R/$key", $value);
         dbunlock();
         $$noid{"$R/longterm"} and
-            logmsg($noid, "note: note attempt under $key by $contact"
-                . ($status ? '' : " -- note failed"));
+            $this->logmsg($noid, sprintf('note: note attempt under %s by %s', $key, $contact)
+                . ($status ? '' : ' -- note failed'));
         if ($status) {
-            addmsg($noid, "db->db_put status/errno ($status/$!)");
+            $this->addmsg($noid, sprintf('db->db_put status/errno (%s/%s)', $status, $!);
             return 0;
         }
         return 1;
@@ -2017,7 +1981,7 @@ EOD;
                 #=cut
             }
             $remainder = $num % $div;
-            $num = int($num / $div);
+            $num = intval($num / $div);
             $s = $this->_xdig[$remainder] . $s;
         }
         $mask =~ /k$/ and       # if it ends in a check character
@@ -2058,30 +2022,25 @@ EOD;
         $dirname = $dirname ?: '';            # make sure $dirname is defined
 
         ! $template || $template === '-' and
-            $$msg = "parse_template: no minting possible.",
+            $$msg = 'parse_template: no minting possible.',
             $_[1] = $_[2] = $_[3] = '',
             return self::NOLIMIT;
         $template !~ /^([^\.]*)\.(\w+)/ and
-            $$msg = "parse_template: no template mask - "
-                . "can't generate identifiers.",
+            $$msg = "parse_template: no template mask - can't generate identifiers.",
             return 0;
         ($prefix, $mask) = ($1 || '', $2);
 
         $mask !~ /^[rsz]/ and
-            $$msg = "parse_template: mask must begin with one of "
-                . "the letters\n'r' (random), 's' (sequential), "
-                . "or 'z' (sequential unlimited).",
+            $$msg = 'parse_template: mask must begin with one of the letters' . PHP_EOL
+                . '"r" (random), "s" (sequential), or "z" (sequential unlimited).',
             return 0;
 
         $mask !~ /^.[^k]+k?$/ and
-            $$msg = "parse_template: exactly one check character "
-                . "(k) is allowed, and it may\nonly appear at the "
-                . "end of a string of one or more mask characters.",
+            $$msg = 'parse_template: exactly one check character (k) is allowed, and it may only appear at the end of a string of one or more mask characters.',
             return 0;
 
         $mask !~ /^.[de]+k?$/ and
-            $$msg = "parse_template: a mask may contain only the "
-                . "letters 'd' or 'e'.",
+            $$msg = 'parse_template: a mask may contain only the letters "d" or "e".',
             return 0;
 
         # Check prefix for errors.
@@ -2090,9 +2049,8 @@ EOD;
         my $has_cc = ($mask =~ /k$/);
         for $c (split '//', $prefix) {
             if ($has_cc && $c !== '/' && ! exists($this->_ordxdig{$c})) {
-                $$msg = "parse_template: with a check character "
-                    . "at the end, a mask may contain only "
-                    . qq@characters from "$this->legalstring".@;
+                $$msg = sprintf('parse_template: with a check character at the end, a mask may contain only characters from "%s".',
+                    $this->legalstring);
                 return 0;
             }
         }
@@ -2106,7 +2064,7 @@ EOD;
         my $masklen = length($mask) - 1;    # subtract one for [rsz]
         $$msg = $prefix . $masklen;
         $mask =~ /^z/ and           # "+" indicates length can grow
-            $$msg .= "+";
+            $$msg .= '+';
 
         # r means random;
         # s means sequential, limited;
@@ -2129,7 +2087,7 @@ EOD;
 
         $_[1] = $prefix;
         $_[2] = $mask;
-        $_[3] = $gen_type = ($mask =~ /^r/ ? "random" : "sequential");
+        $_[3] = $gen_type = ($mask =~ /^r/ ? 'random' : 'sequential');
         # $_[4] was set to the synonym already
         return ($mask =~ /^z/ ? self::NOLIMIT : $total);
     }
@@ -2194,18 +2152,17 @@ EOD;
         $R = &$this->_R;
 
         ! $$noid{"$R/template"} and
-            addmsg($noid,
-                "error: queuing makes no sense in a bind-only minter."),
+            $this->addmsg($noid, 'error: queuing makes no sense in a bind-only minter.'),
             return(());
         ! defined($contact) and
-            addmsg($noid, "error: contact undefined"),
+            $this->addmsg($noid, 'error: contact undefined'),
             return(());
         ! defined($when) || $when !~ /\S/ and
-            addmsg($noid, "error: queue when? (eg, first, lvf, 30d, now)"),
+            $this->addmsg($noid, 'error: queue when? (eg, first, lvf, 30d, now)'),
             return(());
         # yyy what is sensible thing to do if no ids are present?
-        scalar(@ids) < 1 and
-            addmsg($noid, "error: must specify at least one id to queue."),
+        empty($ids) and
+            $this->addmsg($noid, 'error: must specify at least one id to queue.'),
             return(());
         my ($seqnum, $delete) = (0, 0, 0);
         my ($fixsqn, $qdate);           # purposely undefined
@@ -2239,7 +2196,7 @@ EOD;
             $delete = 1;
         }
         elsif ($when !== 'lvf') {
-            addmsg($noid, "error: unrecognized queue time: $when");
+            $this->addmsg($noid, sprintf('error: unrecognized queue time: %s', $when));
             return(());
         }
 
@@ -2250,7 +2207,7 @@ EOD;
             1 or
                 $seqnum = $$noid{"$R/gseqnum"}),
         1 or
-            $qdate = "00000000000000",  # this needs to be 14 zeroes
+            $qdate = '00000000000000',  # this needs to be 14 zeroes
         1;
 
         my $iderror = '';
@@ -2258,8 +2215,7 @@ EOD;
             ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
                 $iderror = '';
         $iderror and
-            addmsg($noid, "error: queue operation not started -- one or "
-                . "more ids did not validate:\n$iderror"),
+            $this->addmsg($noid, sprintf('error: queue operation not started -- one or more ids did not validate: %s', PHP_EOL . $iderror)),
             return(());
         my $firstpart = $$noid{"$R/firstpart"};
         my $padwidth = $$noid{"$R/padwidth"};
@@ -2267,10 +2223,8 @@ EOD;
         my (@retvals, $m, $idval, $paddedid, $circ_svec);
         for my $id (@ids) {
             exists($$noid{"$id\t$R/h"}) and     # if there's a hold
-                $m = qq@error: a hold has been set for "$id" and @
-                    . "must be released before the identifier can "
-                    . "be queued for minting.",
-                logmsg($noid, $m),
+                $m = sprintf('error: a hold has been set for "%s" and must be released before the identifier can be queued for minting.', $id),
+                $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
@@ -2282,38 +2236,34 @@ EOD;
             $circ_svec = get_circ_svec($noid, $id);
 
             $circ_svec =~ /^q/ && ! $delete and
-                $m = "error: id $id cannot be queued since "
-                    . "it appears to be in the queue already -- "
-                    . "circ record is " . $$noid{"$id\t$R/c"},
-                logmsg($noid, $m),
+                $m = sprintf('error: id %s cannot be queued since it appears to be in the queue already -- circ record is %s',
+                    $id, $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
             $circ_svec =~ /^u/ && $delete and
-                $m = "error: id $id has been unqueued already -- "
-                    . "circ record is " . $$noid{"$id\t$R/c"},
-                logmsg($noid, $m),
+                $m = sprintf('error: id %s has been unqueued already -- circ record is %s',
+                    $id, $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
             $circ_svec !~ /^q/ && $delete and
-                $m = "error: id $id cannot be unqueued since its circ "
-                    . "record does not indicate its being queued, "
-                    . "circ record is " . $$noid{"$id\t$R/c"},
-                logmsg($noid, $m),
+                $m = sprintf('error: id %s cannot be unqueued since its circ record does not indicate its being queued, circ record is %s',
+                    $id, $$noid{"$id\t$R/c"}),
+                $this->logmsg($noid, $m),
                 push(@retvals, $m),
                 next
             ;
             # If we get here and we're deleting, circ_svec must be 'q'.
 
             $circ_svec === '' and
-                ($$noid{"$R/longterm"} && logmsg($noid, "note: "
-                    . "id $id being queued before first "
-                    . "minting (to be pre-cycled)")),
+                ($$noid{"$R/longterm"} && $this->logmsg($noid,
+                    sprintf('note: id %s being queued before first minting (to be pre-cycled)', $id))),
             1 or
             $circ_svec =~ /^i/ and
-                ($$noid{"$R/longterm"} && logmsg($noid, "note: "
-                    . "longterm id $id being queued for re-issue"))
+                ($$noid{"$R/longterm"} && $this->logmsg($noid, sprintf('note: longterm id %s being queued for re-issue', $id)))
             ;
 
             # yyy ignore return OK?
@@ -2333,10 +2283,8 @@ EOD;
 
                 dbunlock();
 
-                $m = "error: queue count (" . $$noid{"$R/queued"}
-                    . ") exceeding total possible on id $id.  "
-                    . "Queue operation aborted.";
-                logmsg($noid, $m);
+                $m = sprintf('error: queue count (%s) exceeding total possible on id %s.  Queue operation aborted.', $$noid{"$R/queued"}, $id);
+                $this->logmsg($noid, $m);
                 push @retvals, $m;
                 last;
             }
@@ -2345,11 +2293,9 @@ EOD;
             dbunlock();
 
             $$noid{"$R/longterm"} and
-                logmsg($noid, "id: "
-                    . $$noid{"$R/q/$qdate/$fixsqn/$paddedid"}
-                    . " added to queue under "
-                    . "$R/q/$qdate/$seqnum/$paddedid");
-            push @retvals, "id: $id";
+                $this->logmsg($noid, sprintf('id: %s added to queue under %s',
+                    $$noid{"$R/q/$qdate/$fixsqn/$paddedid"}, $R/q/$qdate/$seqnum/$paddedid));
+            push @retvals, sprintf('id: %s', $id);
             $seqnum and     # it's zero for "lvf" and "delete"
                 $seqnum++;
         }
@@ -2397,45 +2343,40 @@ EOD;
         $R = &$this->_R;
 
         ! $$noid{"$R/template"} and
-            print("This minter does not generate identifiers, but it\n"
-                . "does accept user-defined identifier and element "
-                . "bindings.\n");
+            print('This minter does not generate identifiers, but it does accept user-defined identifier and element bindings.') . PHP_EOL;
         my $total = $$noid{"$R/total"};
         my $totalstr = human_num($total);
         my $naan = $$noid{"$R/naan"} || '';
         $naan and
-            $naan .= "/";
+            $naan .= '/';
 
         my ($prefix, $mask, $gen_type) =
         ($$noid{"$R/prefix"}, $$noid{"$R/mask"}, $$noid{"$R/generator_type"});
 
-        print "Template ", $$noid{"$R/template"}, " will yield ",
-            ($total < 0 ? "an unbounded number of" : $totalstr),
-            " $gen_type unique ids\n";
+        print sprintf('Template %s will yield %s %s unique ids',
+            $$noid{"$R/template"}, $total < 0 ? 'an unbounded number of' : $totalstr, $gen_type) . PHP_EOL;
         my $tminus1 = ($total < 0 ? 987654321 : $total - 1);
 
         # See if we need to compute a check character.
         my $func = ($$noid{"$R/addcheckchar"} ? \&checkchar : \&echo);
-        print
-        "in the range " . &$func($naan . &n2xdig( 0, $mask)) .
-        ", "        . &$func($naan . &n2xdig( 1, $mask)) .
-        ", "        . &$func($naan . &n2xdig( 2, $mask));
+        print 'in the range ' . &$func($naan . &n2xdig( 0, $mask))
+            . ', ' . &$func($naan . &n2xdig( 1, $mask))
+            . ', ' . &$func($naan . &n2xdig( 2, $mask));
         28 < $total - 1 and print
-        ", ..., "   . &$func($naan . &n2xdig(28, $mask));
+            ', ..., ' . &$func($naan . &n2xdig(28, $mask));
         29 < $total - 1 and print
-        ", "        . &$func($naan . &n2xdig(29, $mask));
-        print
-        ", ... up to "
-                . &$func($naan . &n2xdig($tminus1, $mask))
-        . ($total < 0 ? " and beyond.\n" : ".\n")
-        ;
+            ', ' . &$func($naan . &n2xdig(29, $mask));
+        print ', ... up to '
+            . &$func($naan . &n2xdig($tminus1, $mask))
+            . ($total < 0 ? ' and beyond.' : '')
+            . PHP_EOL;
         $mask !~ /^r/ and
             return 1;
-        print "A sampling of random values (may already be in use): ";
+        print 'A sampling of random values (may already be in use): ';
         my $i = 5;
-        print sample($noid) . " "
+        print sample($noid) . ' '
             while ($i-- > 0);
-        print "\n";
+        print PHP_EOL;
         return 1;
     }
 
@@ -2479,12 +2420,11 @@ EOD;
         my @retvals;
 
         ! @ids and
-            addmsg($noid, "error: must specify a template and at least "
-                . "one identifier."),
+            $this->addmsg($noid, 'error: must specify a template and at least one identifier.'),
             return(());
         ! defined($template) and
-            # If $noid is undefined, the caller looks in errmsg(undef).
-            addmsg($noid, "error: no template given to validate against."),
+            # If $noid is null, the caller looks in $this->errmsg(null).
+            $this->addmsg($noid, 'error: no template given to validate against.'),
             return(());
 
         if ($template === '-') {
@@ -2499,7 +2439,7 @@ EOD;
             }
         }
         elsif (! parse_template($template, $prefix, $mask, $gen_type, $msg)) {
-            addmsg($noid, "error: template $template bad: $msg");
+            $this->addmsg($noid, sprintf('error: template %s bad: %s', $template, $msg));
             return(());
         }
 
@@ -2519,23 +2459,22 @@ EOD;
             #
             $id =~ m|^$R/| and
                 push(@retvals, ($id =~ m|^$R/idmap/.+|
-                    ? "id: $id"
-                    : "iderr: identifiers must not start"
-                        . qq@ with "$R/".@)),
+                    ? sprintf('id: %s', $id)
+                    : sprintf('iderr: identifiers must not start with "%s".', "$R/")),
                 next;
 
             $first = $naan;             # ... if any
             $first and
-                $first .= "/";
+                $first .= '/';
             $first .= $prefix;          # ... if any
             ($varpart = $id) !~ s/^$first// and
             # yyy            ($varpart = $id) !~ s/^$prefix// and
-                push(@retvals, "iderr: $id should begin with $first."),
+                push(@retvals, sprintf('iderr: %s should begin with %s.', $id, $first)),
                 next;
             # yyy this checkchar algorithm will need an arg when we
             #     expand into other alphabets
             $should_have_checkchar && ! checkchar($id) and
-                push(@retvals, "iderr: $id has a check character error"),
+                push(@retvals, sprintf('iderr: %s has a check character error', $id)),
                 next;
             ## xxx fix so that a length problem is reported before (or
             # in addition to) a check char problem
@@ -2543,8 +2482,8 @@ EOD;
             # yyy needed?
             #length($first) + length($mask) - 1 != length($id)
             #   and push(@retvals,
-            #       "error: $id has should have length "
-            #       . (length($first) + length($mask) - 1)
+            #       sprintf('error: %s has should have length %s',
+            #           $id, (length($first) + length($mask) - 1))
             #   and next;
 
             # Maskchar-by-Idchar checking.
@@ -2553,29 +2492,25 @@ EOD;
             shift @maskchars;       # toss 'r', 's', or 'z'
             for $c (split('//', $varpart)) {
                 ! defined($m = shift @maskchars) and
-                    push(@retvals, "iderr: $id longer than "
-                        . "specified template ($template)"),
+                    push(@retvals, sprintf('iderr: %s longer than specified template (%s)', $id, $template)),
                     next ID;
                 $m =~ /e/ && $this->legalstring !~ /$c/ and
-                    push(@retvals, "iderr: $id char '$c' conflicts"
-                        . " with template ($template)"
-                        . " char '$m' (extended digit)"),
+                    push(@retvals, sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (extended digit)',
+                        $id, $c, $template, $m)),
                     next ID
                 or
                 $m =~ /d/ && '0123456789' !~ /$c/ and
-                    push(@retvals, "iderr: $id char '$c' conflicts"
-                        . " with template ($template)"
-                        . " char '$m' (digit)"),
+                    push(@retvals, sprintf('iderr: %s char "%s" conflicts with template (%s) char "%s" (digit)',
+                         $id, $c, $template, $m)),
                     next ID
                 ;       # or $m =~ /k/, in which case skip
             }
             defined($m = shift @maskchars) and
-                push(@retvals, "iderr: $id shorter "
-                    . "than specified template ($template)"),
+                push(@retvals, sprintf('iderr: %s shorter than specified template (%s)'; $id, $template)),
                 next ID;
 
             # If we get here, the identifier checks out.
-            push(@retvals, "id: $id");
+            push(@retvals, sprintf('id: %s', $id));
         }
         return(@retvals);
     }
