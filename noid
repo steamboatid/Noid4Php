@@ -364,7 +364,7 @@ class NoidDo
      * @param string $value
      * @return integer 0 (error) or 1 (success)
      */
-    public function bind($how, $id, $elem, $value)
+    public function bind($how, $id, $elem = '', $value)
     {
         global $stderr;
 
@@ -375,9 +375,10 @@ class NoidDo
             return 0;
         }
         $report = null;
-        ! defined($elem) and
+        if (is_null($elem)) {
             $elem = '';
-        if ($elem eq ':') {    # expect name/value pairs up to blank line
+        }
+        if ($elem == ':') {    # expect name/value pairs up to blank line
             if (defined($value)) {
                 fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
                     $value, $elem) . PHP_EOL);
@@ -388,7 +389,7 @@ class NoidDo
             # To slurp paragraph, apparently safest to use local $/, which
             local $/;            # disappears when scope exits.
             $/ = PHP_EOL . PHP_EOL;            # Means paragraph mode.
-            my $para = <STDIN> || "";
+            my $para = <STDIN> || '';
             chop $para;    # yyy needed?
             $para =~ s/^#.*\n//g;        # remove comment lines
             $para =~ s/\n\s+/ /g;        # merge continuation lines
@@ -397,18 +398,21 @@ class NoidDo
             my ($bound, $total) = (0, 0);
             while (1) {
                 ($elem, $value) = (shift @elemvals, shift @elemvals);
-                ! defined($elem) && ! defined($value) and
-                    last;
+                if (! defined($elem) && ! defined($value)) {
+                    break;
+                }
                 $total++;
-                ! defined($elem) and
+                if (! defined($elem)) {
                     Noid::addmsg($noid,
                         sprintf('error: %s: bad element associated with value "%s".', $id, $value));
                     break;
-                ! defined($value) and
-                    $value = "",
-                1 or
-                    chop $value
-                ;
+                }
+                if (! defined($value)) {
+                    $value = '';
+                }
+                else {
+                    chop $value;
+                }
                 $report = Noid::bind($noid, $contact, $validate,
                     $how, $id, $elem, $value);
                 if (! defined($report)) {
@@ -425,7 +429,7 @@ class NoidDo
             Noid::dbclose($noid);
             return(defined($report) ? 1 : 0);
         }
-        elsif ($elem eq ':-') {        # expect name/value to be rest of file
+        elseif ($elem == ':-') {        # expect name/value to be rest of file
             if (defined($value)) {
                 fwrite($stderr, sprintf('Why give a value (%s) with an element "%s"?',
                     $value, $elem) . PHP_EOL);
@@ -437,10 +441,11 @@ class NoidDo
     #            last;        # end at first non-blank, non-comment
     #        }
     #        chop;
-    #        ! defined($_) || ! s/^(\w+)\s*:\s*// and
-    #            Noid::addmsg($noid, sprintf("error: %s no element to bind.', $id)),
-    #            Noid::dbclose($noid),
+    #        if (! defined($_)|| ! s/^(\w+)\s*:\s*//) {
+    #            Noid::addmsg($noid, sprintf("error: %s no element to bind.', $id));
+    #            Noid::dbclose($noid):
     #            return 0;
+    #        }
     #        $elem = $1;
     #        $value = $_;
     #        # To slurp file, apparently safest is to use local $/, which
@@ -458,7 +463,7 @@ class NoidDo
             # Ignore any leading lines that start with a pound sign
             # or contain nothing but white space.
             while (scalar(@input_lines) > 0) {
-                if ((substr($input_lines[0], 0, 1) eq '#') ||
+                if ((substr($input_lines[0], 0, 1) == '#') ||
                     ($input_lines[0] =~ /^\s*$/)) {
                     shift @input_lines;
                     next;
@@ -497,13 +502,13 @@ class NoidDo
             $value .= PHP_EOL;
 
             #
-            # Now drop through to end of if-elsif clause to real binding.
+            # Now drop through to end of if-elseif clause to real binding.
         }
         # yyy eg, :fragment:Offset:Length:Path
         # yyy eg, :fragment:Offset:Length:Path
         # yyy eg, :file:Path
         # yyy eg, ":xml",
-        elsif ($elem =~ /^:/) {
+        elseif ($elem =~ /^:/) {
             fwrite($stderr, sprintf('Binding to element syntax "%s" not supported.', $elem) . PHP_EOL);
             Noid::dbclose($noid);
             return 0;
@@ -748,8 +753,9 @@ class NoidDo
             return 0;
         }
         my $noid = Noid::dbopen($dbname, 0);
-        ! Noid::note($noid, $contact, $key, $value)
-            and print Noid::errmsg($noid);
+        if (! Noid::note($noid, $contact, $key, $value)) {
+            print Noid::errmsg($noid);
+        }
         Noid::dbclose($noid);
         return 1;
     }
@@ -897,7 +903,7 @@ class NoidDo
         # If we get here, @blurbs names one story.
         $blurb = array_shift($blurbs);
 
-        # Big if-elsif clause to switch on requested topic.
+        # Big if-elseif clause to switch on requested topic.
         #
         # Note that we try to make the output conform to ANVL syntax;
         # in the case of help output, every line tries to be a continuation
