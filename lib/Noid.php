@@ -244,7 +244,7 @@ class Noid
         $noid = $noid ?: ''; # act like a global in case $noid undefined
         my $s = $this->_opendbtab{"msg/$noid"};
         $reset and
-            $this->_opendbtab{"msg/$noid"} = "";
+            $this->_opendbtab{"msg/$noid"} = '';
         return $s;
     }
 
@@ -260,7 +260,7 @@ class Noid
         $noid = $noid ?: ''; # act like a global in case $noid undefined
         my $logfhandle = $this->_opendbtab{"log/$noid"};
         defined($logfhandle) and
-            print($logfhandle $message, "\n");
+            print("$logfhandle $message\n");
         # yyy file was opened for append -- hopefully that means always
         #     append even if others have appended to it since our last append;
         #     possible sync problems...
@@ -312,14 +312,14 @@ class Noid
         # yyy should this genonly setting be so capable of contradicting
         #     the $validate arg?
         $$noid{"$R/genonly"} && $validate
-            && ! validate($noid, "-", $id) and
+            && ! validate($noid, '-', $id) and
                 return(undef)
         or
-        ! defined($id) || $id eq "" and
-            addmsg($noid, "error: bind needs an identifier specified."),
+        ! defined($id) || $id === '' and
+            addmsg($noid, 'error: bind needs an identifier specified.'),
             return(undef)
         ;
-        ! defined($elem) || $elem eq "" and
+        ! defined($elem) || $elem === '' and
             addmsg($noid, qq@error: "bind $how" requires an element name.@),
             return(undef);
 
@@ -366,27 +366,27 @@ class Noid
             addmsg($noid, "error: bind how?  What does $how mean?");
             return(undef);
         }
-        my $peppermint = ($how eq "peppermint");
+        my $peppermint = ($how === 'peppermint');
         $peppermint and
             # yyy to do
-            addmsg($noid, qq@error: bind "peppermint" not implemented.@),
+            addmsg($noid, qq@error: bind 'peppermint' not implemented.@),
             return(undef);
         # YYY bind mint file Elem Value     -- put into FILE by itself
         # YYY bind mint stuff_into_big_file Elem Value -- cat into file
-        if ($how eq "mint" || $how eq "peppermint") {
-            $id ne "new" and
+        if ($how === 'mint' || $how === 'peppermint') {
+            $id !== 'new' and
                 addmsg(qq@error: bind "mint" requires id to be @
                     . qq@given as "new".@),
                 return(undef);
             ! ($id = $oid = mint($noid, $contact, $peppermint)) and
                 return(undef);
         }
-        $how eq "delete" || $how eq "purge" and
-            (defined($value) && $value eq "" and
+        $how === 'delete' || $how === 'purge' and
+            (defined($value) && $value === '' and
                 addmsg($noid, qq@error: why does "bind $how" @
                     . "have a supplied value ($value)?"),
                 return(undef)),
-            $value = "",
+            $value = '',
             1
         or
         ! defined($value) and
@@ -403,7 +403,7 @@ class Noid
                     . "must already be bound."),
                 dbunlock(),
                 return(undef);
-            $$noid{"$id\t$elem"} = "";  # can concatenate with impunity
+            $$noid{"$id\t$elem"} = '';  # can concatenate with impunity
         }
         else {                      # currently bound
             grep(/^$how$/, qw( new mint peppermint )) == 1 and
@@ -418,15 +418,15 @@ class Noid
         my $newlen = length($value);
         my $statmsg = "$newlen bytes written";
 
-        $how eq "delete" || $how eq "purge" and
+        $how === 'delete' || $how === 'purge' and
             delete($$noid{"$id\t$elem"}),
             $statmsg = "$oldlen bytes removed"
         or
-        $how eq "add" || $how eq "append" and
+        $how === 'add' || $how === 'append' and
             $$noid{"$id\t$elem"} .= $value,
             $statmsg .= " to the end of $oldlen bytes",
         or
-        $how eq "insert" || $how eq "prepend" and
+        $how === 'insert' || $how === 'prepend' and
             $$noid{"$id\t$elem"} = $value . $$noid{"$id\t$elem"},
             $statmsg .= " to the beginning of $oldlen bytes",
         or
@@ -483,7 +483,7 @@ class Noid
         my $checkchar = $this->_xdig[$sum % $this->alphacount];
         #print "RADIX=$this->alphacount, mod=", $sum % $this->alphacount, "\n";
         return $id . $checkchar
-            if ($lastchar eq "+" || $lastchar eq $checkchar);
+            if ($lastchar === '+' || $lastchar === $checkchar);
         return undef;       # must be request to check, but failed match
         # xxx test if check char changes on permutations
         # XXX include test of length to make sure < than 29 (R) chars long
@@ -567,7 +567,7 @@ class Noid
 
         -e $dbname and
             addmsg(undef, "error: a NOID database already exists in "
-                . ($dbdir ne "." ? "\"$dbdir\"."
+                . ($dbdir !== '.' ? "\"$dbdir\"."
                     : "the current directory.") . "\n"
                 . "\tTo permit creation of a new minter, rename\n"
                 . "\tor remove the entire NOID subdirectory."),
@@ -596,18 +596,18 @@ class Noid
             addmsg($noid, "error: contact ($contact) must be non-empty."),
             return(undef);
 
-        $term ||= "-";
-        $term ne "long" && $term ne "medium"
-                && $term ne "-" && $term ne "short" and
+        $term = $term ?: '-';
+        $term !== 'long' && $term !== 'medium'
+                && $term !== '-' && $term !== 'short' and
             addmsg($noid, "error: term ($term) must be either "
-                . qq@"long", "medium", "-", or "short".@),
+                . qq@"long", "medium", '-', or "short".@),
             return(undef);
 
-        ! defined($naa) and $naa = "";
-        ! defined($naan) and $naan = "";
-        ! defined($subnaa) and $subnaa = "";
+        ! defined($naa) and $naa = '';
+        ! defined($naan) and $naan = '';
+        ! defined($subnaa) and $subnaa = '';
 
-        $term eq "long" &&
+        $term === 'long' &&
             ($naan !~ /\S/ || $naa !~ /\S/ || $subnaa !~ /\S/) and
                 addmsg($noid, qq@error: longterm identifiers require @
                     . "an NAA Number, NAA, and SubNAA."),
@@ -615,7 +615,7 @@ class Noid
         # xxx should be able to check naa and naan live against registry
         # yyy code should invite to apply for NAAN by email to ark@cdlib.org
         # yyy ARK only? why not DOI/handle?
-        $term eq "long" && ($naan !~ /\d\d\d\d\d/) and
+        $term === 'long' && ($naan !~ /\d\d\d\d\d/) and
             addmsg($noid, qq@error: term of "long" requires a @
                 . "5-digit NAAN (00000 if none), and non-empty "
                 . "string values for NAA and SubNAA."),
@@ -624,10 +624,10 @@ class Noid
         # Create log and logbdb files from scratch and make them writable
         # before calling dbopen().
         #
-        ! storefile("$dir/log", "") || ! chmod(0666, "$dir/log") and
+        ! storefile("$dir/log", '') || ! chmod(0666, "$dir/log") and
             addmsg(undef, "Couldn't chmod log file: $!"),
             return(undef);
-        ! storefile("$dir/logbdb", "") || ! chmod(0666, "$dir/logbdb") and
+        ! storefile("$dir/logbdb", '') || ! chmod(0666, "$dir/logbdb") and
             addmsg(undef, "Couldn't chmod logbdb file: $!"),
             return(undef);
         ! ($noid = dbopen($dbname, DB_CREATE)) and
@@ -642,15 +642,15 @@ class Noid
         #     so we can use DB_DUP flag
         $$noid{"$R/naa"} = $naa;
         $$noid{"$R/naan"} = $naan;
-        $$noid{"$R/subnaa"} = $subnaa || "";
+        $$noid{"$R/subnaa"} = $subnaa || '';
 
-        $$noid{"$R/longterm"} = ($term eq "long");
-        $$noid{"$R/wrap"} = ($term eq "short");     # yyy follow through
+        $$noid{"$R/longterm"} = ($term === 'long');
+        $$noid{"$R/wrap"} = ($term === 'short');     # yyy follow through
 
         $$noid{"$R/template"} = $template;
         $$noid{"$R/prefix"} = $prefix;
         $$noid{"$R/mask"} = $mask;
-        $$noid{"$R/firstpart"} = ($naan ? $naan . "/" : "") . $prefix;
+        $$noid{"$R/firstpart"} = ($naan ? $naan . "/" : '') . $prefix;
         $$noid{"$R/addcheckchar"} = ($mask =~ /k$/);    # boolean answer
 
         $$noid{"$R/generator_type"} = $gen_type;
@@ -715,16 +715,16 @@ class Noid
         $msk =~ s/^ze/zeeee/;       # initial 'e' can become many later on
 
         my $properties =
-            ($naan ne "" && $naan ne "00000" ? "G" : "-")
-            . ($gen_type eq "random" ? "R" : "-")
+            ($naan !== '' && $naan !== '00000' ? 'G' : '-')
+            . ($gen_type === 'random' ? 'R' : '-')
             # yyy substr is supposed to cut off first char
-            . ($genonly && ($pre . substr($msk, 1)) !~ /eee/ ? "A" : "-")
-            . ($term eq "long" ? "N" : "-")
-            . ($genonly && $prefix !~ /-/ ? "I" : "-")
-            . ($$noid{"$R/addcheckchar"} ? "T" : "-")
+            . ($genonly && ($pre . substr($msk, 1)) !~ /eee/ ? 'A' : '-')
+            . ($term === 'long' ? 'N' : '-')
+            . ($genonly && $prefix !~ /-/ ? 'I' : '-')
+            . ($$noid{"$R/addcheckchar"} ? 'T' : '-')
             # yyy "E" mask test anticipates future extensions to alphabets
             . ($genonly && ($prefix =~ /[aeiouy]/i || $mask =~ /[^rszdek]/)
-                ? "-" : "E")        # Elided vowels or not
+                ? '-' : 'E')        # Elided vowels or not
         ;
         $$noid{"$R/properties"} = $properties;
 
@@ -761,9 +761,9 @@ class Noid
 
         # Adjust some empty values for short-term display purposes.
         #
-        $naa ||= "no Name Assigning Authority";
-        $subnaa ||= "no sub authority";
-        $naan ||= "no NAA Number";
+        $naa = $naa ?: 'no Name Assigning Authority';
+        $subnaa = $subnaa ?: 'no sub authority';
+        $naan = $naan ?: 'no NAA Number';
 
         # Create a human- and machine-readable report.
         #
@@ -783,7 +783,7 @@ class Noid
             . qq@ $gen_type identifiers of form $template
         A Noid minting and binding database has been created that will bind
         @
-            . ($genonly ? "" : "any identifier ") . "and mint "
+            . ($genonly ? '' : "any identifier ") . "and mint "
             . ($total == self::NOLIMIT ? qq@an unbounded number of identifiers
         with the template "$template".@
             : $htotal . qq@ identifiers with the template "$template".@)
@@ -856,7 +856,7 @@ EOD;
         my $db = $this->_opendbtab{"bdb/$noid"};
         my $cursor = $db->db_cursor();
         my ($key, $value) = ("$R/", 0);
-        if ($level eq "dump") {
+        if ($level === 'dump') {
             print "$key: $value\n"
                 while ($cursor->c_get($key, $value, DB_NEXT) == 0);
             return 1;
@@ -882,7 +882,7 @@ EOD;
             last
                 if ($key !~ m|^$R/|);
             print "  $key: $value\n"
-                if ($level eq "full" or
+                if ($level === 'full' or
                     $key !~ m|^$R/c\d| &&
                     $key !~ m|^$R/saclist| &&
                     $key !~ m|^$R/recycle/|);
@@ -1026,7 +1026,7 @@ EOD;
         #   or die("Can't open database file: $!\n");
         #print "dbopen: returning hashref=$noid, db=$db\n";
         $this->_opendbtab{"bdb/$noid"} = $db;
-        $this->_opendbtab{"msg/$noid"} = "";
+        $this->_opendbtab{"msg/$noid"} = '';
         $this->_opendbtab{"log/$noid"} = ($log_opened ? $logfhandle : undef);
 
         $locktest and
@@ -1126,10 +1126,10 @@ EOD;
                 . " requires that an identifier be specified."),
             return(undef);
 
-        my ($hdr, $retval) = ("", "");
+        my ($hdr, $retval) = ('', '');
         $verbose and $hdr = "id:    $id"
-            . (exists($$noid{"$id\t$R/h"}) ? " hold" : "") . "\n"
-            . (validate($noid, "-", $id) ? "" : errmsg($noid) . "\n")
+            . (exists($$noid{"$id\t$R/h"}) ? " hold" : '') . "\n"
+            . (validate($noid, '-', $id) ? '' : errmsg($noid) . "\n")
             . "Circ:  " . ($$noid{"$id\t$R/c"}
                 ? $$noid{"$id\t$R/c"} : "uncirculated") . "\n";
 
@@ -1152,7 +1152,7 @@ EOD;
                     # remember to strip "Id\t" from front of $key
                     $retval .= ($verbose ?
                         ($key =~ /^[^\t]*\t(.*)/ ? $1 : $key)
-                            . ": " : "") . "$value\n";
+                            . ": " : '') . "$value\n";
                 $status = $cursor->c_get($key, $value, DB_NEXT);
                 $status != 0 || $key !~ /^$first/ and
                     $done = 1   # no more elements under id
@@ -1236,7 +1236,7 @@ EOD;
             # If we get here, term is not "long".
             logmsg($noid, temper() . ": Resetting counter to zero; "
                 . "previously issued identifiers will be re-issued");
-            if ($$noid{"$R/generator_type"} eq "sequential") {
+            if ($$noid{"$R/generator_type"} === 'sequential') {
                 $$noid{"$R/oacounter"} = 0;
             }
             else {
@@ -1248,7 +1248,7 @@ EOD;
 
         # Deal with the easy sequential generator case and exit early.
         #
-        if ($$noid{"$R/generator_type"} eq "sequential") {
+        if ($$noid{"$R/generator_type"} === 'sequential') {
             my $id = &n2xdig($$noid{"$R/oacounter"}, $$noid{"$R/mask"});
             $$noid{"$R/oacounter"}++;   # incr to reflect new total
             dbunlock();
@@ -1276,10 +1276,10 @@ EOD;
 
         # deal with an exhausted subcounter
         if ($sctr >= $$noid{"$R/${sctrn}/top"}) {
-            my ($c, $modsaclist) = ("", "");
+            my ($c, $modsaclist) = ('', '');
             # remove from active counters list
             foreach $c (@saclist) {     # drop $sctrn, but add it to
-                next if ($c eq $sctrn);     # inactive subcounters
+                next if ($c === $sctrn);     # inactive subcounters
                 $modsaclist .= "$c ";
             }
             $$noid{"$R/saclist"} = $modsaclist;     # update saclist
@@ -1328,7 +1328,7 @@ EOD;
         #
         my $circ_svec = (split('/\|/', $circ_rec))[0];
 
-        ! defined($circ_svec) || $circ_svec eq "" and
+        ! defined($circ_svec) || $circ_svec === '' and
             logmsg($noid, "error: id $id has no circ status vector -- "
                 . "circ record is $circ_rec"),
             return '';
@@ -1391,7 +1391,7 @@ EOD;
         #
         $$noid{"$R/longterm"} and
             logmsg($noid, "m: $circ_rec"
-                . ($status ? "" : " -- hold failed"));
+                . ($status ? '' : " -- hold failed"));
 
         ! $status and           # must be an error in hold_set()
             return(undef);
@@ -1470,16 +1470,16 @@ EOD;
         ! @ids and
             addmsg($noid, qq@error: no Id(s) specified@),
             return(0);
-        $on_off ne "set" && $on_off ne "release" and
+        $on_off !== 'set' && $on_off !== 'release' and
             addmsg($noid, "error: unrecognized hold directive ($on_off)"),
             return(0);
 
-        my $release = $on_off eq "release";
+        my $release = $on_off === 'release';
         # yyy what is sensible thing to do if no ids are present?
-        my $iderror = "";
+        my $iderror = '';
         $$noid{"$R/genonly"} and
-            ($iderror = validate($noid, "-", @ids)) !~ /error:/ and
-                $iderror = "";
+            ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
+                $iderror = '';
         $iderror and
             addmsg($noid, "error: hold operation not started -- one or "
                 . "more ids did not validate:\n$iderror"),
@@ -1512,7 +1512,7 @@ EOD;
             #     "reserved for future use" or "reserved, never issued"
             #
         }
-        addmsg($noid, "ok: $n hold" . ($n == 1 ? "" : "s") . " placed");
+        addmsg($noid, "ok: $n hold" . ($n == 1 ? '' : "s") . " placed");
         return(1);
     }
 
@@ -1578,7 +1578,7 @@ EOD;
      */
     protected function human_num($num)
     {
-        $num ||= 0;
+        $num = $num ?: 0;
         my $numstr = sprintf("%u", $num);
         if ($numstr =~ /^\d\d\d\d+$/) {     # if num is 4 or more digits
             $numstr .= ",";         # prepare to add commas
@@ -1607,7 +1607,7 @@ EOD;
         $status and
             return "error: id2elemval: c_get status/errno ($status/$!)";
         $key !~ /^$first/ and
-            return "";
+            return '';
         my ($pattern, $newval);
         while (1) { # exhaustively visit all patterns for this element
             ($pattern) = ($key =~ m|$first(.+)|);
@@ -1616,14 +1616,14 @@ EOD;
                 # yyy kludgy use of unlikely delimiters
                 (eval '$newval =~ ' . qq@s$pattern$value@ and
                     # replaced, so return
-                    return ($verbose ? "$elem: " : "") . $newval),
+                    return ($verbose ? "$elem: " : '') . $newval),
                 ($@ and
                     return "error: id2elemval eval: $@")
                 ;
             $cursor->c_get($key, $value, DB_NEXT) != 0 and
-                return "";
+                return '';
             $key !~ /^$first/ and       # no match and ran out of rules
-                return "";
+                return '';
         }
     }
 
@@ -1665,7 +1665,7 @@ EOD;
         my $n = 0;
         my $t = $total;
         my $pctr = $$noid{"$R/percounter"};
-        my $saclist = "";
+        my $saclist = '';
         while ($t > 0) {
             $$noid{"$R/c${n}/top"} = ($t >= $pctr ? $pctr : $t);
             $$noid{"$R/c${n}/value"} = 0;       # yyy or 1?
@@ -1674,7 +1674,7 @@ EOD;
             $n++;
         }
         $$noid{"$R/saclist"} = $saclist;
-        $$noid{"$R/siclist"} = "";
+        $$noid{"$R/siclist"} = '';
         $n--;
 
         dbunlock();
@@ -1801,7 +1801,7 @@ EOD;
             # it was queued to get it minted earlier or later than it
             # would normally be minted.  Log if term is "long".
             #
-            $circ_svec eq "" and
+            $circ_svec === '' and
                 ($$noid{"$R/longterm"} && logmsg($noid, "note: "
                     . "queued id $id coming out of queue on first "
                     . "minting (pre-cycled)"))
@@ -1947,7 +1947,7 @@ EOD;
         dbunlock();
         $$noid{"$R/longterm"} and
             logmsg($noid, "note: note attempt under $key by $contact"
-                . ($status ? "" : " -- note failed"));
+                . ($status ? '' : " -- note failed"));
         if ($status) {
             addmsg($noid, "db->db_put status/errno ($status/$!)");
             return 0;
@@ -1999,19 +1999,19 @@ EOD;
                 #=for later
                 ## why is this slower?  should be faster since it does NOT use regexprs
                 # ! defined($c) ||    # terminate on r or s even if
-                #     $c eq 'r' || $c eq 's'
+                #     $c === 'r' || $c === 's'
                 #     and last;   # $num is not all used up yet
-                # $c eq 'e' and
+                # $c === 'e' and
                 #     $div = $this->alphacount
                 # or
-                # $c eq 'd' and
+                # $c === 'd' and
                 #     $div = $this->digitcount
                 # or
-                # $c eq 'z' and
+                # $c === 'z' and
                 #     $varwidth = 1   # re-uses last $div value
                 #     and next
                 # or
-                # $c eq 'k' and
+                # $c === 'k' and
                 #     next
                 # ;
                 #=cut
@@ -2047,25 +2047,25 @@ EOD;
     {
         my $dirname;
         my $msg = \$_[4];   # so we can modify $message argument easily
-        $$msg = "";
+        $$msg = '';
 
         # Strip final spaces and slashes.  If there's a pathname,
         # save directory and final component separately.
         #
-        $template ||= "";
+        $template = $template ?: '';
         $template =~ s|[/\s]+$||;       # strip final spaces or slashes
         ($dirname, $template) = $template =~ m|^(.*/)?([^/]+)$|;
-        $dirname ||= "";            # make sure $dirname is defined
+        $dirname = $dirname ?: '';            # make sure $dirname is defined
 
-        ! $template || $template eq "-" and
+        ! $template || $template === '-' and
             $$msg = "parse_template: no minting possible.",
-            $_[1] = $_[2] = $_[3] = "",
+            $_[1] = $_[2] = $_[3] = '',
             return self::NOLIMIT;
         $template !~ /^([^\.]*)\.(\w+)/ and
             $$msg = "parse_template: no template mask - "
                 . "can't generate identifiers.",
             return 0;
-        ($prefix, $mask) = ($1 || "", $2);
+        ($prefix, $mask) = ($1 || '', $2);
 
         $mask !~ /^[rsz]/ and
             $$msg = "parse_template: mask must begin with one of "
@@ -2089,7 +2089,7 @@ EOD;
         my $c;
         my $has_cc = ($mask =~ /k$/);
         for $c (split '//', $prefix) {
-            if ($has_cc && $c ne '/' && ! exists($this->_ordxdig{$c})) {
+            if ($has_cc && $c !== '/' && ! exists($this->_ordxdig{$c})) {
                 $$msg = "parse_template: with a check character "
                     . "at the end, a mask may contain only "
                     . qq@characters from "$this->legalstring".@;
@@ -2214,13 +2214,13 @@ EOD;
         #
         if ($when =~ /^(\d+)([ds]?)$/) {    # current time plus a delay
             # The number of seconds in one day is 86400.
-            my $multiplier = (defined($2) && $2 eq "d" ? 86400 : 1);
+            my $multiplier = (defined($2) && $2 === 'd' ? 86400 : 1);
             $qdate = temper(time() + $1 * $multiplier);
         }
-        elsif ($when eq "now") {    # a synonym for current time
+        elsif ($when === 'now') {    # a synonym for current time
             $qdate = temper(time());
         }
-        elsif ($when eq "first") {
+        elsif ($when === 'first') {
             # Lowest value first (lvf) requires $qdate of all zeroes.
             # To achieve "first" semantics, we use a $qdate of all
             # zeroes (default above), which means this key will be
@@ -2235,10 +2235,10 @@ EOD;
             # so we effectively truncate on the left to 6 digits with mod
             # arithmetic when we convert it to $fixsqn via sprintf().
         }
-        elsif ($when eq "delete") {
+        elsif ($when=== 'delete') {
             $delete = 1;
         }
-        elsif ($when ne "lvf") {
+        elsif ($when !== 'lvf') {
             addmsg($noid, "error: unrecognized queue time: $when");
             return(());
         }
@@ -2253,10 +2253,10 @@ EOD;
             $qdate = "00000000000000",  # this needs to be 14 zeroes
         1;
 
-        my $iderror = "";
+        my $iderror = '';
         $$noid{"$R/genonly"} and
-            ($iderror = validate($noid, "-", @ids)) !~ /error:/ and
-                $iderror = "";
+            ($iderror = validate($noid, '-', @ids)) !~ /error:/ and
+                $iderror = '';
         $iderror and
             addmsg($noid, "error: queue operation not started -- one or "
                 . "more ids did not validate:\n$iderror"),
@@ -2306,7 +2306,7 @@ EOD;
             ;
             # If we get here and we're deleting, circ_svec must be 'q'.
 
-            $circ_svec eq "" and
+            $circ_svec === '' and
                 ($$noid{"$R/longterm"} && logmsg($noid, "note: "
                     . "id $id being queued before first "
                     . "minting (to be pre-cycled)")),
@@ -2354,7 +2354,7 @@ EOD;
                 $seqnum++;
         }
         dblock();
-        $when eq "first" and
+        $when === 'first' and
             $$noid{"$R/fseqnum"} = $seqnum,
         1 or
         $qdate > 0 and
@@ -2402,7 +2402,7 @@ EOD;
                 . "bindings.\n");
         my $total = $$noid{"$R/total"};
         my $totalstr = human_num($total);
-        my $naan = $$noid{"$R/naan"} || "";
+        my $naan = $$noid{"$R/naan"} || '';
         $naan and
             $naan .= "/";
 
@@ -2487,7 +2487,7 @@ EOD;
             addmsg($noid, "error: no template given to validate against."),
             return(());
 
-        if ($template eq "-") {
+        if ($template === '-') {
             ($prefix, $mask) = ($$noid{"$R/prefix"}, $$noid{"$R/mask"});
             # push(@retvals, "template: " . $$noid{"$R/template"});
             if (! $$noid{"$R/template"}) {  # do blanket validation
