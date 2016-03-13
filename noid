@@ -44,18 +44,22 @@
  * XXX record literal noid dbcreate (re)creation command used into README
  */
 
+ /**
+  * Notes
+  *
+  * Command line is strict posix: options must be set before arguments, with or
+  * without the "--" separator. Perl script allows any order.
+  */
+
 require_once 'lib/Noid.php';
 
 $web = 0;
 
 $dbdir = null;
 $dbname = null;
+
 $debug = null;
-$locktest = null;
-$ver = null;
-$help = null;
-$contact = null;
-$bulkcmd = null;
+$bulkcmd = 0;
 
 $template = null;
 $snaa = null;
@@ -63,10 +67,6 @@ $total = null;
 
 $valid_helptopics = array();
 $info = array(); # purposely undefined for now
-$valid_commands = array(
-    'bind', 'dbinfo', 'dbcreate', 'fetch', 'get', 'hello', 'help', 'hold',
-    'mint', 'note', 'peppermint', 'queue', 'validate',
-);
 
 # yyy make a noidmail (email robot interface?)
 # yyy location field for redirect should include a discriminant
@@ -87,103 +87,158 @@ $valid_commands = array(
 /**
  * Main.
  */
-my $line;
-if ($0 =~ m|noidu[^/]*$|) {    # if called with the URL interface
-    $web = 1;            # orient output for HTTP
-    print "Content-Type: text/plain\n\n";
-    open(STDERR, ">&STDOUT")
-        or die("Can't combine stderr and stdout: $!\n");
-    ! defined($ENV{'QUERY_STRING'}) and
-        die("No QUERY_STRING (hence no command) defined.\n");
-    ($line = $ENV{'QUERY_STRING'}) =~ tr/+/ /;
-    @ARGV = shellwords($line);
-    #print "ARGV: " . join("|", @ARGV) . "\n";
+
+/**
+ * List of arguments from command line ($argv) or web request ($_REQUEST).
+ *
+ * @var array
+ */
+$args = array();
+
+/**
+ * Manage the input.
+ *
+ * @var object
+ */
+$do = new NoidDo();
+
+/**
+ * Redirect errors for web (redirect stderr to standard output).
+ *
+ * @var resource
+ */
+global $stderr;
+$stderr = STDERR;
+
+// If called with the URL interface.
+if (preg_match('|noidu[^/]*$|', $argv[0])) {
+    if (PHP_SAPI === 'cli' || empty($_SERVER['REMOTE_ADDR'])) {
+        print 'Not called via http.' . PHP_EOL;
+        exit(1);
+    }
+    $web = 1; # orient output for HTTP
+    print 'Content-Type: text/plain' . PHP_EOL . PHP_EOL;
+    // Seems not possible directly in php.
+    // if (fopen(STDERR, ">&STDOUT") === false) {
+    //     $error = error_get_last();
+    //     die("Can't combine stderr and stdout: " . $error['message'] . PHP_EOL);
+    // }
+    $stderr = STDOUT;
+    if (empty($_REQUEST)) {
+        print 'No QUERY_STRING (hence no command) defined.' . PHP_EOL;
+        exit(1);
+    }
+    $args = $_REQUEST;
+    #print "ARGV: " . join('|', $argv) . PHP_EOL;
 }
-if ($0 =~ m|noidr[^/]*$|) {    # if called for RewriteMap resolving,
-                # see Apache Rewrite mod documentation
-    $| = 1;        # very important to unbuffer the output
+// If called for RewriteMap resolving.
+// See Apache Rewrite mod documentation.
+// TODO Ckeck "noidr" for RewriteMap via Apache.
+elseif (preg_match('|noidr[^/]*$|', $argv[0])) {
+    flush(); # very important to unbuffer the output
     $bulkcmd = 1;
     # yyy should we set a timeout to prevent hanging the server?
+    $args = $argv;
+}
+else {
+    $args = $argv;
 }
 
-if (! ($contact = who_are_you($web))) {
-    print STDERR "Can't tell who you are: $!\n";
+$contact = $do->who_are_you($web);
+if (empty($contact)) {
+    $error = error_get_last();
+    fwrite($stderr, "Can't tell who you are: " . $error['message'] . PHP_EOL);
     exit(1);
 }
 
-if (! GetOptions(
-    'debug'        => \$debug,    # flag
-    'locktest=i'    => \$locktest,    # flag
-    'f=s'        => \$dbdir,    # filesystem directory name
-    'version'    => \$ver,    # flag
-    'help'        => \$help,    # flag
-)) {
-    print "error: GetOptions\n";
-    usage(1, 1, "intro");
+$options = $do->getoptreq();
+if ($options === false) {
+    print 'error: GetOptions' . PHP_EOL;
+    $do->usage(1, 1, 'intro');
     exit(1);
 }
-if ($locktest) {
-    $locktest < 0 and
-        print("error: locktest value must be a positive "
-            . "number of seconds to sleep\n"),
+
+$args = $do->getOnlyArguments($args, $options);
+$options = $do->unifyOptionsAsLong($options);
+$debug = isset($options['debug']) ? $options['debug'] : $debug;
+if (isset($options['locktest'])) {
+    $locktest = (integer) $options['locktest'];
+    if ($locktest < 0) {
+        print 'error: locktest value must be a positive number of seconds to sleep' . PHP_EOL;
+        // NOTE Why exit 0 for an error in Perl script (and somewhere else)?
         exit(0);
-    Noid::locktest($locktest);
+    }
+    $do->command('locktest', $locktest);
 }
-$web && $debug and
-    print "contact=$contact, pwd=", `pwd`;
+if ($web && $debug) {
+    print "contact=$contact, pwd=" . getcwd();
+}
 
 # Handle -v or -h, and exit early.
-if ($ver) {
+if (isset($options['version'])) {
     # We take our version number from the Noid module version.
-    print qq@This is "noid" version $Noid::VERSION.\n@;
+    printf("This is \"noid\" version %s." . PHP_EOL, Noid::VERSION);
     exit(0);
 }
-if ($help) {
+if (isset($options['help'])) {
     # yyy should we encode help output?   print "help:\n";
-    usage(0, 0, "intro");
+    $do->usage(0, 0, 'intro');
     exit(0);
 }
+
+// NOTE Not clear why checked later in Perl script.
+if ($web && isset($options['fdbdir'])) {
+    print '-f option not allowed in URL interface.' . PHP_EOL;
+    return 0;
+}
+
+$dbdir = isset($options['fdbdir']) ? $options['fdbdir'] : $dbdir;
 
 # Now try to find a database directory string.
 # In the special case of dbcreate, we may create
 # and name the directory on behalf of the user.
 #
-if (! defined($dbdir)) {
-    defined($ENV{'NOID'}) and    # is NOID env variable defined?
-        $dbdir = $ENV{'NOID'},
-    1 or
-    $0 =~ m|_([^/]+)$| and        # executable link reveals dbdir?
-        $dbdir = $1,
-    1 or
-        $dbdir = '.',        # else try current directory
-    ;
-    if (! defined($dbdir) || $dbdir !~ /\S/) {
-        print "error: no Dbdir\n";
-        usage(1, 1, "intro");
+if (empty($dbdir)) {
+    if (getenv('NOID')) { # is NOID env variable defined?
+        $dbdir = getenv('NOID');
+    }
+    // Executable link reveals dbdir?
+    elseif (preg_match('|_([^/]+)$|', $args[0], $matches)) {
+        $dbdir = $matches[1];
+    }
+    // Else try current directory.
+    else {
+        $dbdir = getcwd();
+    }
+
+    $dbdir = trim($dbdir);
+    if (empty($dbdir)) {
+        print 'error: no Dbdir' . PHP_EOL;
+        $do->usage(1, 1, 'intro');
         exit(1);
     }
 }
-elsif ($web) {
-    print qq@-f option not allowed in URL interface.\n@;
-    return(0);
-}
+
 # Now untaint $dbdir.  yyy we can do better?
-$dbdir =~ m|^(.*)$| and
-    $dbdir = $1
-or
-    print("error: bad Dbdir\n"),
-    usage(1, 1, "intro"),
-    exit(1)
-;
+if (preg_match('|^(.*)$|', $dbdir, $matches)) {
+    $dbdir = $matches[1];
+}
+else {
+    print('error: bad Dbdir' . PHP_EOL);
+    $do->usage(1, 1, 'intro');
+    exit(1);
+}
 $dbname = "$dbdir/NOID/noid.bdb";
 
 # Bulk command mode is signified by a single final argument of "-".
 # If we're _not_ in bulk command mode, expect a single command
 # represented by the remaining arguments; do it and exit.
 #
-$bulkcmd ||= ($#ARGV == 0 && $ARGV[0] eq "-");
-if (! $bulkcmd) {
-    do_command(@ARGV);
+$bulkcmd = count($args) == 2 && $args[1] == '-';
+if (!$bulkcmd) {
+    // Remove the command itself.
+    unset($args[0]);
+    $do->command($args);
     exit(0);
 }
 
@@ -194,55 +249,81 @@ if (! $bulkcmd) {
 # XXX make sure to %-decode web QUERY_STRING, so we don't have
 #     to always put +'s for spaces
 #
+# NOTE The delimiter is the '"', even missing, but command line allows "'" too.
 // TODO Finalize bulk command.
-while (($args = STDIN)) {
-    $do->command(shellwords($args));
+while (($line = STDIN)) {
+    $args = str_getcsv($line, ' ', '"');
+    $do->command($args);
 }
 exit(0);
 
 class NoidDo
 {
-    public function command()
+    /**
+    * List of possible long options according to short ones.
+    *
+    * @var array
+    */
+    protected $_opts = array(
+        'd' => 'debug', # flag
+        'l:' => 'locktest:', # flag
+        'f:' => 'fdbdir:', # filesystem directory name
+        'v' => 'version', # flag
+        'h' => 'help', # flag
+    );
+
+    /**
+     * List of valid noid commands.
+     *
+     * @var array
+     */
+    protected $_valid_commands = array(
+        'bind', 'dbinfo', 'dbcreate', 'fetch', 'get', 'hello', 'help', 'hold',
+        'mint', 'note', 'peppermint', 'queue', 'validate',
+    );
+
+    public function command($args = array())
     {
         # Any remaining args should form a noid command.
         # Look at the command part (if any) now, and complain about
         # a non-existent database unless the command is "dbcreate".
         #
-        my $command = shift;
-        if (! defined($command)) {    # if no command arg
-            usage(1, 1, "intro");
-            return(0);
+        $command = array_shift($args);
+        $command = trim($command);
+        if (empty($command)) {    # if no command arg
+            $this->usage(1, 1, 'intro');
+            return 0;
         }
-        if (! -f $dbname
-                && $command ne 'dbcreate' && $command ne 'help') {
+        if (!is_file($dbname)
+                && $command != 'dbcreate'
+                && $command != 'help'
+            ) {
             # if the database doesn't exist when it needs to
-            bprint(*STDERR, "error: no database ($dbname) "
-                . "-- use dbcreate?\n\n");
-            usage(1, 1, "intro");
-            return(0)
+            fprint($stderr, "error: no database ($dbname) -- use dbcreate?" . PHP_EOL . PHP_EOL);
+            $this->usage(1, 1, 'intro');
+            return 0;
         }
-        if (grep(/^$command$/, @valid_commands) != 1) {
-            print "error: no such command: $command (",
-                join(" ", @_), ")\n";
-            usage(1, 1, "intro");
-            return(0);
+        if (!in_array($command, $this->_valid_commands)) {
+            printf('error: no such command: %s (%s).' . PHP_EOL,
+                $command, implode(' ', $args));
+            $this->usage(1, 1, 'intro');
+            return 0;
         }
         # Perform extra checks in $web case.
-        if ($web && $command eq 'dbcreate') {
-            print qq@error: command "$command" not allowed in URL interface.\n@;
-            usage(1, 1, "intro");
-            return(0);
+        if ($web && $command == 'dbcreate') {
+            printf('error: command "%s" not allowed in URL interface.' . PHP_EOL, $command);
+            $this->usage(1, 1, 'intro');
+            return 0;
         }
         # It should now be safe to turn off strict 'refs' when we
         # invoke a command via its subroutine name.
-        #if ($#_ < 0) {
-        #    usage(1);    # yyy say something senstive about $command
-        #usage(1, 1, "intro");
-        #    return(0);
-        #}
+        # if (count($args) <= 1) {
+        #     usage(1);    # yyy say something senstive about $command
+        #     usage(1, 1, 'intro');
+        #     return 0;
+        # }
 
-        no strict 'refs';
-        &$command(@_);
+        return call_user_func_array(array($this, $command), $args);
     }
 
     #
@@ -989,36 +1070,173 @@ q@@,
      * @param string $web
      * @return string
      */
-    protected function _who_are_you($web)
+    public function who_are_you($web)
     {
-        my $user;
+        $user = null;
         if ($web) {
-            $user = $ENV{'REMOTE_USER'} || '';
-            my $host = $ENV{'REMOTE_HOST'} || $ENV{'REMOTE_ADDR'} || '';
+            $user = $_SERVER['REMOTE_USER'] ?: '';
+            $host = ($_SERVER['REMOTE_HOST'] ?: $_SERVER['REMOTE_ADDR']) ?: '';
             $user .= '@' . $host;
         }
 
         # Look up by REAL_USER_ID first.
-        my ($name, undef, undef, $gid) = getpwuid($<);
-        my $ugid = getlogin() || $name;
-        ! $ugid and
-            return "";
-        $ugid .= "/" . ((getgrgid($gid))[0] || "");
+        $username = get_current_user();
+        if (empty($username)) {
+            return '';
+        }
+        $groupInfo = function_exists('posix_getgrgid')
+            ? posix_getgrgid(getmygid())
+            : null;
+        $groupname = $groupInfo ? $groupInfo['name'] : '';
+        $ugid = $username . '/' . $groupname;
 
         # If EFFECTIVE_USER_ID differs from REAL_USER_ID, get its info too.
-        if ($> ne $<) {
-            ($name, undef, undef, $gid) = getpwuid($>);
-            ! $name and
-                return "";
-            $ugid .= " ($name/" . ((getgrgid($gid))[0] || "") . ")";
+        if (function_exists('posix_geteuid')) {
+            $uid = getmyuid();
+            $euid = posix_geteuid();
+            if ($uid != $euid) {
+                $eUserInfo = posix_getpwuid($euid);
+                if (empty($eUserInfo)) {
+                    return '';
+                }
+                $eUsername = $eUserInfo['name'];
+                $eGroupId = posix_getegid();
+                $eGroupInfo = posix_getgrgid($eGroupId);
+                $eGroupname = $groupInfo ? $groupInfo['name'] : '';
+                $ugid .= " ($eUsername/$eGroupname)";
+            }
         }
-        $user = ($user ? "$user $ugid" : $ugid);
+
+        $user = $user ? "$user $ugid" : $ugid;
         return $user;
     }
-}
-exit 0;
 
-1;
+    /** These methods replaces Perl dependancies (GetOpt::Long, Text::ParseWord). */
+
+    /**
+     * Get options from the command line or the web request.
+     *
+     * @see https://php.net/manual/en/function.getopt.php#113015
+     * @return array|boolean
+     */
+    public function getoptreq()
+    {
+        // Command line.
+        if (PHP_SAPI === 'cli' || empty($_SERVER['REMOTE_ADDR'])) {
+            $shortopts = join('', array_keys($this->_opts));
+            $longopts = array_values($this->_opts);
+            $result = getopt($shortopts, $longopts);
+            if ($result === false) {
+                return false;
+            }
+        }
+        // Web script.
+        elseif (isset($_REQUEST)) {
+            $result = array();
+
+            $shortopts = array_keys($this->_opts);
+            $longopts = array_values($this->_opts);
+            $opts = array_merge($shortopts, $longopts);
+
+            foreach ($opts as $opt) {
+                // Optional.
+                if (substr($opt, -2) === '::') {
+                    $key = substr($opt, 0, -2);
+
+                    if (isset($_REQUEST[$key]) && !empty($_REQUEST[$key])) {
+                        $result[$key] = $_REQUEST[$key];
+                    }
+                    elseif (isset($_REQUEST[$key])) {
+                        $result[$key] = false;
+                    }
+                }
+                // Required value.
+                elseif (substr($opt, -1) === ':') {
+                    $key = substr($opt, 0, -1);
+
+                    if (isset($_REQUEST[$key]) && !empty($_REQUEST[$key])) {
+                        $result[$key] = $_REQUEST[$key];
+                    }
+                }
+                // No value.
+                elseif (ctype_alnum($opt)) {
+                    if (isset($_REQUEST[$opt])) {
+                        $result[$opt] = false;
+                    }
+                }
+            }
+        }
+        // Error.
+        else {
+            return false;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Remove options from the arguments.
+     *
+     * The command is returned as first value of the array, as in $argv.
+     *
+     * @see Adapted from https://php.net/manual/en/function.getopt.php#100573
+     * @param array $arguments From $argv or $_REQUEST (with command as first).
+     * @param array $options Extracted options from arguments via getopt().
+     * @return array
+     */
+    public function getOnlyArguments(array $arguments, array $options)
+    {
+        $args = array_search('--', $arguments);
+        if ($args) {
+            return array_splice($arguments, ++$args);
+        }
+
+        $pruneargv = array();
+        foreach ($options as $option => $value) {
+            $values = is_array($value) ? $value : array($value);
+            foreach ($values as $value) {
+                foreach ($arguments as $key => $chunk) {
+                    $regex = '/^'. (strlen($option) > 1 ? '--' : '-') . $option . '/';
+                    if ($chunk == $value && $arguments[$key-1][0] == '-' || preg_match($regex, $chunk)) {
+                        array_push($pruneargv, $key);
+                    }
+                }
+            }
+        }
+        while ($key = array_pop($pruneargv)) {
+            unset($arguments[$key]);
+        }
+
+        return array_values($arguments);
+    }
+
+    /**
+     * Unify short and long options as long options.
+     *
+     * @param array $options
+     * @return array Unified options.
+     */
+    public function unifyOptionsAsLong($options)
+    {
+        $result = array();
+        $shortopts = array_map(
+            function ($v) { return rtrim($v, ':'); },
+            array_keys($this->_opts));
+        $longopts = array_map(
+            function ($v) { return rtrim($v, ':'); },
+            $this->_opts);
+        $opts = array_combine($shortopts, $longopts);
+        foreach ($options as $key => $value) {
+            // Check if the key is a short option.
+            if (isset($opts[$key])) {
+                $key = $opts[$key];
+            }
+            $result[$key] = $value;
+        }
+        return $result;
+    }
+}
+exit(0);
 
 # yyy Possible for 'c' mask char:
 #     ASCII 33 to 126 (no SPACE, no DEL)  --> 94 (not prime)
