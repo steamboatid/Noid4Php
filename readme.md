@@ -70,6 +70,29 @@ This tool has been tested on php 5.6 and php 7.
 at the root of the tool.
 
 
+Enhancements
+------------
+
+[Noid for Php] enhances some points present in the todo list of the Perl script.
+
+- Added the command get_note() to get a user note.
+- Added support for alphabets until 89 characters. The character repertoires are:
+    - Standard:
+        - "d": { 0-9 x } cardinality 10
+        - "e": { 1-9 b-z } - {l, vowels} cardinality 29
+    - Proposed:
+        - "i": { 0-9 x } cardinality 11
+        - "x": { 0-9 a-f _ } cardinality 17
+        - "v": { 0-9 a-z _ } cardinality 37
+        - "E": { 1-9 b-z B-Z } - {l, vowels} cardinality 47
+        - "w": { 0-9 a-z A-Z # * + @ _ } cardinality 67
+    - Proposed, but not accepted for Ark:
+        - "c": Visible ASCII - { % - . / \ } cardinality 89
+    - Not proposed in the Perl script, but compatible with Ark and useful
+    because the longest with only alphanumeric characters:
+        - "l" { 0-9 a-z A-Z } - { l } cardinality 61
+
+
 About the port
 --------------
 
