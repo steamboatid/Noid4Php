@@ -304,7 +304,7 @@ class Perl_Random
     /**
      * Return a pseudo-random integer of 48 bits.
      *
-     * This function don't use srand() or mt_rand() in order to avoid side
+     * This function doesn't use srand() or mt_rand() in order to avoid side
      * effects.
      *
      * @return integer 48-bit integer.
