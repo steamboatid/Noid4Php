@@ -67,6 +67,11 @@ link "noid", but is not required.
 
 This tool has been tested on php 5.6 and php 7.
 
+* WARNING *
+
+This script wasn’t tested on php 7.1, where the output of rand() and srand()
+changed.
+
 [PhpUnit] can be used to check the installation via the command `phpunit tests`
 at the root of the tool.
 

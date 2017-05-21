@@ -40,6 +40,8 @@
  * On Php, rand() and mt_srand() create stable sequences since 5.3.15.
  * On Perl, rand() creates stable sequences since 5.20.0.
  *
+ * @todo Check the output of rand and srand(), that changed in php 7.1.
+ *
  * @todo Manage float random numbers from 8193 until 32 bits (Perl limit).
  * @see Perl_RandomTest
  *
