@@ -19,7 +19,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
         $result = shell_exec($cmd);
         if (empty($result)) {
             $this->markTestSkipped(
-                __('Perl is unavailable.')
+                'Perl is unavailable.'
             );
         }
 
