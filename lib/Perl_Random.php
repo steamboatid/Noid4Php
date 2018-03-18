@@ -77,9 +77,7 @@ class Perl_Random
 
         // Check if BCMath is installed.
         if (!extension_loaded('bcmath')) {
-            if (!function_exists('dl') || !dl('bcmath.so')) {
-                throw new RuntimeException('Perl_Random requires the extension "BCMath".');
-            }
+            throw new RuntimeException('Perl_Random requires the extension "BCMath".');
         }
     }
 
