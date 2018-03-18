@@ -7,10 +7,12 @@
  * @package Perl_Random
  */
 
+use PHPUnit\Framework\TestCase;
+
 /**
  * Tests for Perl_Random.
  */
-class Perl_RandomTest extends PHPUnit_Framework_TestCase
+class Perl_RandomTest extends TestCase
 {
     public function setUp()
     {
