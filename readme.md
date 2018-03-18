@@ -65,15 +65,35 @@ Simply include the file "lib/Noid.php" in your project and the class "Noid" will
 be available. The command line tool is available via "noid.php" or the symbolic
 link "noid", but is not required.
 
-This tool has been tested on php 5.6 and php 7.
+### Perl and php
 
-* WARNING *
+The output of perl (release 5.20 and greater) and php (before and since release
+7.1, where the output of `rand()` and `srand()` were [fixed] in the php
+algorithm), are the same for integers at least until 32 bits (perl limit, namely
+more than 4 000 000 000 identifiers).
 
-This script wasn’t tested on php 7.1, where the output of rand() and srand()
-changed.
+**For float numbers, the output is different after the 8192nd value**, so keep
+the same language.
 
-[PhpUnit] can be used to check the installation via the command `phpunit tests`
-at the root of the tool.
+Anyway, it is recommended to use php 7.1 or higher, since previous versions of
+php are no more supported.
+
+### Automatic test
+
+[PhpUnit] (version 6 or higher) can be used to check the installation via the
+command `phpunit` at the root of the tool. Note that the full series of tests
+are long, a few dozen of minutes, because the process compares the outputs of
+php methods and  perl ones for many seeds.
+
+If you don’t have phpunit, you can do:
+
+```
+wget https://phar.phpunit.de/phpunit-6.5.phar
+// Quick tests.
+php phpunit-6.5.phar
+// Full tests.
+php phpunit-6.5.phar tests
+```
 
 
 Enhancements
@@ -171,11 +191,11 @@ Copyright
 ---------
 
 - Author:  John A. Kunze, jak@ucop.edu, California Digital Library
-  - Originally created Nov. 2002 at UCSF Center for Knowledge Management
+- Originally created Nov. 2002 at UCSF Center for Knowledge Management
 - Ported to php by Daniel Berthereau for Mines ParisTech
 
 * Copyright (c) 2002-2006 UC Regents
-* Copyright (c) 2016-2017 Daniel Berthereau
+* Copyright (c) 2016-2018 Daniel Berthereau
 
 
 License
@@ -245,6 +265,7 @@ Current maintainers:
 [Ruby]: https://github.com/microservices/noid
 [metacpan]: https://metacpan.org/pod/distribution/Noid/noid
 [commands]: https://metacpan.org/pod/Noid
+[fixed]: https://secure.php.net/manual/en/migration71.incompatible.php#migration71.incompatible.fixes-to-mt_rand-algorithm
 [PhpUnit]: https://phpunit.de
 [rosettacode.org]: https://rosettacode.org/wiki/Random_number_generator_%28included%29#Perl
 [issues]: https://github.com/Daniel-KM/Noid4Php/issues
