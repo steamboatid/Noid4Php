@@ -45,7 +45,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
             $this->assertEquals($perl, $php,
                 sprintf('Perl rand() "%s" is not equal to Perl_Random "%s" [seed: %d, length: %d, loop: %d]',
                     $perl, $php, $seed, $length, $loop));
-            $length++;
+            ++$length;
             if ((++$loop % 1000) == 0) {
                 fwrite(STDERR, sprintf('%s: Seed: %d - Length: %d - Loop: %d / 136000' . PHP_EOL, __FUNCTION__, $seed, $length, $loop));
                 $length = intval($length * 1.1);
@@ -89,7 +89,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
             $this->assertEquals($perl, $php,
                 sprintf('Perl rand() "%s" is not equal to Perl_Random "%s" [seed: %d, length: %d, loop: %d]',
                     $perl, $php, $seed, $length, $loop));
-            $seed++;
+            ++$seed;
             if ((++$loop % 1000) == 0) {
                 fwrite(STDERR, sprintf('%s: Seed: %d - Length: %d - Loop: %d / 136000' . PHP_EOL, __FUNCTION__, $seed, $length, $loop));
                 $seed = intval($seed * 1.1);
@@ -114,7 +114,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
             $this->assertEquals($perl, $php,
                 sprintf('Perl rand() "%s" is not equal to Perl_Random "%s" [seed: %d, length: %d, loop: %d]',
                     $perl, $php, $seed, $length, $loop));
-            $length++;
+            ++$length;
             if ((++$loop % 1000) == 0) {
                 fwrite(STDERR, sprintf('%s: Seed: %d - Length: %d - Loop: %d / 136000' . PHP_EOL, __FUNCTION__, $seed, $length, $loop));
                 $length = intval($length * 1.1);
@@ -139,7 +139,7 @@ class Perl_RandomTest extends PHPUnit_Framework_TestCase
             $this->assertEquals($perl, $php,
                 sprintf('Perl rand() "%s" is not equal to Perl_Random "%s" [seed: %d, length: %d, loop: %d]',
                     $perl, $php, $seed, $length, $loop));
-            $length++;
+            ++$length;
             if ((++$loop % 1000) == 0) {
                 fwrite(STDERR, sprintf('%s: Seed: %d - Length: %d - Loop: %d / 136000' . PHP_EOL, __FUNCTION__, $seed, $length, $loop));
                 $length = intval($length * 1.1);
