@@ -911,7 +911,7 @@ class NoidDo
      * Print a blank (space) in front of every newline.
      * First arg must be a filehandle.
      *
-     * @param handle $out
+     * @param resource $out
      * @param string|array $args
      * @return integer|boolean False if error.
      */
@@ -1259,7 +1259,7 @@ EOD;
     /**
      * Get options from the command line or the web request.
      *
-     * @see https://php.net/manual/en/function.getopt.php#113015
+     * @link https://php.net/manual/en/function.getopt.php#113015
      * @return array|boolean
      */
     public function getoptreq()
@@ -1321,8 +1321,8 @@ EOD;
      * Remove options from the arguments.
      *
      * The command is returned as first value of the array, as in $argv.
+     * Adapted from https://php.net/manual/en/function.getopt.php#100573
      *
-     * @see Adapted from https://php.net/manual/en/function.getopt.php#100573
      * @param array $arguments From $argv or $_REQUEST (with command as first).
      * @param array $options Extracted options from arguments via getopt().
      * @return array
