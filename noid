@@ -3,7 +3,7 @@
 /**
  * noid - a php script that mints and binds nice opaque identifiers
  *   using the Noid.php class.  This script can be invoked additionally
- *   via a URL interface as "noidu...", which formats output for the web.
+ *   via a URL interface as "noidu…", which formats output for the web.
  *
  * Author:  John A. Kunze, jak@ucop.edu, California Digital Library
  *    Orginally created Nov. 2002 at UCSF Center for Knowledge Management
@@ -361,7 +361,7 @@ class NoidDo
      *
      * yyy what is the sensible thing to do if (a) no element given,
      *     (b) if no value, or (c) if there are multiple values?
-     * yyy vbind(..., template, ...)?  nvbind()?
+     * yyy vbind(…, template, …)?  nvbind()?
      *
      * yyy what about append at the list vs the string level?
      *
@@ -536,7 +536,7 @@ class NoidDo
         else {
             print $report . PHP_EOL;
         }
-        # yyy make sure return(0)'s do dbclose...
+        # yyy make sure return(0)'s do dbclose…
         Noid::dbclose($noid);
         return empty($report) ? 1 : 0;
     }
@@ -1021,7 +1021,7 @@ For more information try "perldoc noid" or "noid help Command".  Summary:
             }
             $msg = <<<'EOD'
 
-If invoked as "noidu...", output is formatted for a web client.  Give Command
+If invoked as "noidu…", output is formatted for a web client.  Give Command
 as "-" to run a block of noid Commands read from stdin or from POST data.
 EOD;
             $this->_bprint($out, $msg);
@@ -1153,7 +1153,7 @@ is not globally registered.
 EOD;
         $info['fetch/brief'] = <<<'EOD'
 
-   noid fetch Id Element ...		# fetch/map one or more Elements
+   noid fetch Id Element …		# fetch/map one or more Elements
 
 EOD;
         $info['fetch'] = <<<'EOD'
@@ -1167,7 +1167,7 @@ sets "myGoto" element of identifier "fk0wqkb" to a string (here a URL).
 EOD;
         $info['get/brief'] = <<<'EOD'
 
-   noid get Id Element ...		# fetch/map Elements without labels
+   noid get Id Element …		# fetch/map Elements without labels
 
 EOD;
         $info['get'] = '';
@@ -1175,7 +1175,7 @@ EOD;
         $info['hello'] = '';
         $info['hold/brief'] = <<<'EOD'
 
-   noid hold (set|release) Id ...	# place or remove a "hold" on Id(s)
+   noid hold (set|release) Id …	# place or remove a "hold" on Id(s)
 
 EOD;
         $info['hold'] = '';
@@ -1191,7 +1191,7 @@ EOD;
         $info['peppermint'] = '';
         $info['queue/brief'] = <<<'EOD'
 
-   noid queue (now|first|lvf|Time) Id ...	# queue (eg, recycle) Id(s)
+   noid queue (now|first|lvf|Time) Id …	# queue (eg, recycle) Id(s)
       Time is NU, meaning N units, where U= d(ays) | s(econds).
       With "lvf" (Lowest Value First) lowest value of id will mint first.
 
@@ -1199,7 +1199,7 @@ EOD;
         $info['queue'] = '';
         $info['validate/brief'] = <<<'EOD'
 
-   noid validate Template Id ...	# to check if Ids are valid
+   noid validate Template Id …	# to check if Ids are valid
       Use Template of "-" to use the minter's native template.
 
 EOD;
@@ -1474,7 +1474,7 @@ C<s> and end in a digit (the final C<d>), all within an unbounded sequential
 (C<z>) namespace.  The TEMPLATES section gives a full explanation.
 This generator will mint the identifiers, in order,
 
-    s0, s1, s2, ..., s9, s10, ..., s99, s100, ...
+    s0, s1, s2, …, s9, s10, …, s99, s100, …
 
 and never run out.  To mint the first ten identifiers,
 
@@ -1694,7 +1694,7 @@ the entire F<NOID> subdirectory.
 
 The B<noid> utility may be run as a URL-driven web server application,
 such as in a CGI that allows name assignment via remote operator.
-If the executable begins B<noidu...>, the noid URL mode is in effect.
+If the executable begins B<noidu…>, the noid URL mode is in effect.
 Input parameters, separated by a "+" sign, are expected to arrive
 embedded in the query part of a URL, and output will be formatted
 for display on an ordinary web browser.  An executable of B<noidu_xk4>,
@@ -1702,7 +1702,7 @@ for example, would turn on URL mode and set I<Dbdir> to F<xk4>.
 This is further described under URL INTERFACE.
 
 The B<noid> utility may be run as a name resolver running behind a web
-server.  If the executable begins B<noidr...>, the noid resolver mode is
+server.  If the executable begins B<noidr…>, the noid resolver mode is
 in effect, which means that commands will be read from the standard input
 (as if only the "-" argument had been given) and the script output will
 be unbuffered.  This mode is designed for machine interaction and is
@@ -1874,14 +1874,14 @@ and peppermint a new Id first.
 The RULEZ<>-Z<>BASED MAPPING section explains how to set up retrieval
 using non-stored values.
 
-=item B<noid fetch> I<Id> [ I<Element> ... ]
+=item B<noid fetch> I<Id> [ I<Element> … ]
 
 For the noid, Id, print with labels all bindings for the given
 Elements.  If no Element is given, find and print all bindings for the
 given Id.  This is the verbose version of the B<get> command, in that it
 prints headers and labels for everything it finds.
 
-=item B<noid get> I<Id> [ I<Element> ... ]
+=item B<noid get> I<Id> [ I<Element> … ]
 
 For the noid, Id, print without labels all bindings for the given
 Elements.  If no Element is given, find and print all bindings for the
@@ -1889,7 +1889,7 @@ given Id.  This is the quiet version of the B<fetch> command, in that it
 suppresses all headers and labels.  Between each Element requested,
 the output will be separated by a blank line.
 
-=item B<noid hold> (B<set>|B<release>) I<Id> ...
+=item B<noid hold> (B<set>|B<release>) I<Id> …
 
 Place or remove a B<hold> on one or more Ids.  A hold placed on an Id that
 has not been minted will cause it to be skipped when its turn to be minted
@@ -1898,7 +1898,7 @@ impossible to queue (typically for recycling).  Minters of long term
 identifiers automatically place a hold on every minted noid.
 Holds can be placed or removed manually at any time.
 
-=item B<noid queue> (B<now>|B<first>|B<lvf>|I<Time>) I<Id> ...
+=item B<noid queue> (B<now>|B<first>|B<lvf>|I<Time>) I<Id> …
 
 Queue one or more Ids for minting.  Time is a number followed by units,
 which can be B<d> for days or B<s> for seconds (the default units).  This
@@ -1910,7 +1910,7 @@ be taken from the queue for minting before all others.  [ needs testing ]
 
 =for comment XXX is lvf tested enough?
 
-=item B<noid validate> (I<Template>|B<->) I<Id> ...
+=item B<noid validate> (I<Template>|B<->) I<Id> …
 
 Validate one or more Ids against a given Template, which, if given as "-",
 causes the minter's native I<Template> to be used.
@@ -1932,7 +1932,7 @@ and because of the C<z> they will be sequentially generated without limit.
 Beyond the first 100 mint operations, more digits will be added as needed.
 The minted noids will be, in order,
 
-    tb7r00, tb7r01, ..., tb7r100, tb7r101, ..., tb7r1000, ...
+    tb7r00, tb7r01, …, tb7r100, tb7r101, …, tb7r1000, …
 
 The period (".") in the Template does not appear in the identifiers but
 serves to separate the constant first part (Prefix) from the variable
@@ -2284,7 +2284,7 @@ high as 9, with higher numbers producing more detailed information.
 This completes the one-time server set up for resolvers.
 
 Thereafter, for each resolver that you wish to run, you need to set up
-a noid database and create a link of the form B<noidr...> so that the
+a noid database and create a link of the form B<noidr…> so that the
 noid script can be invoked in resolution mode.  Unlike the URL interface,
 the resolution interface does not itself mint from the underlying minter.
 A separate URL interface may still be set up to mint and bind identifiers
@@ -2305,7 +2305,7 @@ the minter in this example is for generating long term identifiers.
 The last command makes a new hard link (not a soft link) to the noid
 script, which for this resolver will be invoked under the name B<noidr_kt5>.
 The resolution interface is not called by a URL directly, but is invoked
-once upon server startup, where the B<noidr...> prefix tells it to run in
+once upon server startup, where the B<noidr…> prefix tells it to run in
 resolution mode.  In this mode it loops, waiting for and responding to
 individual resolution attempts from the server itself.
 
@@ -2328,7 +2328,7 @@ to restart the server before it will have the desired effect.
   # Alternative: redirect failed lookup to a global resolver
 
 When a request received by the server matches a Rewrite Rule, an attempt
-to resolve it via the running B<noidr...> script is made.  In this example,
+to resolve it via the running B<noidr…> script is made.  In this example,
 we will need to have bound a string representing a URL to the value for
 the fixed element name "myGoto" under each identifier that we wish to be
 resolvable.  Building on the example from the previous section, assume the
@@ -2433,7 +2433,7 @@ then the check digit (xdigit) also differs.  If the I<n>-th xdigit's
 ordinal is I<d> in one string and I<e> in another, the sums of products
 differ only by
 
-(... + nd + ...) - (... + ne + ...) = n(d - e)
+(… + nd + …) - (… + ne + …) = n(d - e)
 
 The check digits differ only if I<n(d - e)> is not I<0> mod I<R>.  Assume
 (contrapositively) that I<n(d - e)> does equal I<0> mod I<R>.  First, we
@@ -2467,7 +2467,7 @@ and if another string is the same except for having I<d> in position I<i>
 and I<e> in position I<j>, then the check digits also differ.  The sums
 of the products differ by
 
-    (... + ie + ... + jd + ...) - (... + id + ... + je + ...)
+    (… + ie + … + jd + …) - (… + id + … + je + …)
         = (ie + jd) - (id + je) = e(i - j) + d(j - i)
         =  d(j - i) - e(j - i)  = n(d - e)
 

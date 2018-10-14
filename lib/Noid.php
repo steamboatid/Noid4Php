@@ -218,7 +218,7 @@ class Noid
      * 419      421      431      433
      * 439      443      449      457
      * 461      463      467      479
-     * 487      491      499      503  ...
+     * 487      491      499      503  …
      */
 
     /**
@@ -414,7 +414,7 @@ class Noid
         }
         # yyy file was opened for append -- hopefully that means always
         #     append even if others have appended to it since our last append;
-        #     possible sync problems...
+        #     possible sync problems…
         return 1;
     }
 
@@ -561,7 +561,7 @@ class Noid
         # Check circulation status.  Error if term is "long" and the id
         # hasn't been issued unless a hold was placed on it.
         #
-        # If no circ record and no hold...
+        # If no circ record and no hold…
         if (empty(dba_fetch("$id\t$R/c", $db)) && !dba_exists("$id\t$R/h", $db)) {
             if (dba_fetch("$R/longterm", $db)) {
                 self::addmsg($noid, sprintf('error: %s: "long" term disallows binding an unissued identifier unless a hold is first placed on it.', $oid));
@@ -954,7 +954,7 @@ class Noid
         dba_replace("$R/version", self::VERSION, $db);
 
         # yyy should verify that a given NAAN and NAA are registered,
-        #     and should offer to register them if not.... ?
+        #     and should offer to register them if not… ?
 
         # Capture the properties of this minter.
         #
@@ -1383,7 +1383,7 @@ NAAN:      $naan
         self::$_opendbtab['log'][$noid] = $log_opened ? $logfhandle : null;
 
         if (self::$locktest) {
-            print sprintf('locktest: holding lock for %s seconds...', self::$locktest) . PHP_EOL;
+            print sprintf('locktest: holding lock for %s seconds…', self::$locktest) . PHP_EOL;
             sleep(self::$locktest);
         }
 
@@ -1436,7 +1436,7 @@ NAAN:      $naan
      * get next value and, if no error, change the 2nd and 3rd parameters and
      * return 1, else return 0.  To start at the beginning, the 2nd parameter,
      * key (key), should be set to zero by caller, who might do this:
-     * $key = 0; while (each($noid, $key, $value)) { ... }
+     * $key = 0; while (each($noid, $key, $value)) { … }
      * The 3rd parameter will contain the corresponding value.
      *
      * @todo is this needed? in present form?
@@ -1850,7 +1850,7 @@ NAAN:      $naan
         }
 
         // Get the shortest alphabet. There are some subtleties ("x" has no "x",
-        // "E has no "0"...), so a full check is needed.
+        // "E has no "0"…), so a full check is needed.
         $allCharacters = $prefix;
         foreach (str_split(substr($mask, 1, strlen($mask) - 2)) as $c) {
             $allCharacters .= self::$alphabets[self::$_alphabetChecks[$c]];
@@ -2498,7 +2498,7 @@ NAAN:      $naan
     }
 
     /**
-     * Record user (":/:/...") values in admin area.
+     * Record user (":/:/…") values in admin area.
      *
      * @param string $noid
      * @param string $contact
@@ -2599,7 +2599,7 @@ NAAN:      $naan
      * $message will always be set; 0 return with error, 1 return with synonym
      *
      * @todo templates should probably have names, eg, jk##.. could be jk4
-     * or jk22, as in "./noid testdb/jk4 <command> ... "
+     * or jk22, as in "./noid testdb/jk4 <command> … "
      *
      * @param string $template
      * @param string $prefix
@@ -3069,12 +3069,12 @@ NAAN:      $naan
 
         print 'in the range ' . $results[0] . ', ' . $results[1] . ', ' . $results[2];
         if (28 < $total - 1) {
-            print ', ..., ' . $results[28];
+            print ', …, ' . $results[28];
         }
         if (29 < $total - 1) {
             print ', ' . $results[29];
         }
-        print ', ... up to ' . $results[$tminus1]
+        print ', … up to ' . $results[$tminus1]
             . ($total < 0 ? ' and beyond.' : '.')
             . PHP_EOL;
         if (substr($mask, 0, 1) !== 'r') {
@@ -3197,11 +3197,11 @@ NAAN:      $naan
                 continue;
             }
 
-            $first = $naan;             # ... if any
+            $first = $naan;             # … if any
             if ($first) {
                 $first .= '/';
             }
-            $first .= $prefix;          # ... if any
+            $first .= $prefix;          # … if any
             $varpart = preg_replace('/^' . preg_quote($first, '/') . '/', '', $id);
             if (strlen($first) > 0 && strpos($id, $first) !== 0) {
             # yyy            ($varpart = $id) !~ s/^$prefix// and
@@ -3401,13 +3401,13 @@ Since 2002 Sep 3:
     identifiers would be minted if we started over from scratch (limited
     disaster recovery assistance)
 - changed module name from PDB.pm to Noid.pm
-- changed variable names from pdb... to noid...
+- changed variable names from pdb… to noid…
 - began adding support for sequentially generated numbers as part of
     generalization step (eg, for use as session ids)
 - added version number
 - added copyright to code
 - slightly improved comments and error messages
-- added extra internal (admin) symbols "$R/..." (":/..."),
+- added extra internal (admin) symbols "$R/…" (":/…"),
     eg, "template" broken into "prefix", "mask", and "generator_type"
 - changed the number of counters from 300 to 293 (a prime) on the
     theory that it will improve the impression of randomness
@@ -3424,7 +3424,7 @@ Since 2004 Jan 18:
 - changed dbcreate to take term, naan, and naa
 - added DB_DUP flag to enable duplicate keys
 
-Plus many, many more changes...
+Plus many, many more changes…
 
 =end
 
