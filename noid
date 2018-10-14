@@ -1245,7 +1245,7 @@ EOD;
                 $eUsername = $eUserInfo['name'];
                 $eGroupId = posix_getegid();
                 $eGroupInfo = posix_getgrgid($eGroupId);
-                $eGroupname = $groupInfo ? $groupInfo['name'] : '';
+                $eGroupname = $eGroupInfo ? $eGroupInfo['name'] : '';
                 $ugid .= " ($eUsername/$eGroupname)";
             }
         }
