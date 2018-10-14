@@ -1242,7 +1242,7 @@ NAAN:      $naan
                 $flags = self::DB_CREATE;
                 break;
             default:
-                self::addmsg(null, sprintf('"%s" is not a regular flag', $flag));
+                self::addmsg(null, sprintf('"%s" is not a regular flag', $flags));
                 return;
         }
 
