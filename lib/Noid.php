@@ -1541,7 +1541,7 @@ NAAN:      $naan
                 $retval .= dba_fetch("$id\t$elem", $db) . PHP_EOL;
             }
             else {
-                $idmapped = self::_id2elemval($verbose, $id, $elem);
+                $idmapped = self::_id2elemval($noid, $verbose, $id, $elem);
                 if ($verbose) {
                     $retval .= $idmapped
                             ? $idmapped . PHP_EOL . 'note: previous result produced by :idmap'
@@ -2126,12 +2126,13 @@ NAAN:      $naan
     /**
      * Return $elem: $val or error string.
      *
+     * @param string $noid
      * @param string $verbose
      * @param string id
      * @param string $elem
      * @return string
      */
-    static protected function _id2elemval($verbose, $id, $elem)
+    static protected function _id2elemval($noid, $verbose, $id, $elem)
     {
         $R = &self::$_R;
 
