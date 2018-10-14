@@ -3032,6 +3032,11 @@ NAAN:      $naan
 
         $R = &self::$_R;
 
+        $db = self::_getDb($noid);
+        if (is_null($db)) {
+            return;
+        }
+
         $template = dba_fetch("$R/template", $db);
         if (!$template) {
             print 'This minter does not generate identifiers, but it does accept user-defined identifier and element bindings.' . PHP_EOL;
@@ -3062,7 +3067,7 @@ NAAN:      $naan
         foreach ($results as $n => &$xdig) {
             $xdig = $naan . self::n2xdig($n, $mask);
             if (dba_fetch("$R/addcheckchar", $db)) {
-                $xdig = self::checkchar($result, $prefix . '.' . $mask);
+                $xdig = self::checkchar($xdig, $prefix . '.' . $mask);
             }
         }
         unset($xdig);
