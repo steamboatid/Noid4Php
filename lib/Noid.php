@@ -1544,7 +1544,7 @@ NAAN:      $naan
                 $idmapped = self::_id2elemval($verbose, $id, $elem);
                 if ($verbose) {
                     $retval .= $idmapped
-                            ? $dmapped . PHP_EOL . 'note: previous result produced by :idmap'
+                            ? $idmapped . PHP_EOL . 'note: previous result produced by :idmap'
                             : sprintf('error: "%s %s" is not bound.', $id, $elem);
                     $retval .= PHP_EOL;
                 }
