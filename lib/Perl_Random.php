@@ -39,7 +39,7 @@
  *
  * Note:
  * On Php, rand() and mt_srand() create stable sequences since 5.3.15 and were
- * improved in php 7.1 (see https://secure.php.net/manual/en/migration71.incompatible.php#migration71.incompatible.fixes-to-mt_rand-algorithm).
+ * improved in php 7.1 (see @link https://secure.php.net/manual/en/migration71.incompatible.php#migration71.incompatible.fixes-to-mt_rand-algorithm).
  * On Perl, rand() creates stable sequences since 5.20.0.
  *
  * @todo Manage float random numbers from 8193 until 32 bits (Perl limit).
@@ -96,7 +96,7 @@ class Perl_Random
      * Store a seed to create 48-bit pseudo-random integers via a linear
      * congruential generator.
      *
-     * @param integer $seed A 32-bit integer. If more than 32 bits, only
+     * @param int $seed A 32-bit integer. If more than 32 bits, only
      * the high-order 32 bits are kept internally.
      * @return void
      */
@@ -108,7 +108,7 @@ class Perl_Random
         }
         // Initialize with the specified seed.
         else {
-            $seed = (integer) $seed;
+            $seed = (int) $seed;
             // The input seed is a 32-bit integer: greater bits are discarded.
             $this->_random_state_48 = (($seed << 16) + 0x330E) & 0xFFFFFFFFFFFF;
         }
@@ -129,7 +129,7 @@ class Perl_Random
      * Get a pseudo-random integer (48-bit).
      *
      * @uses Perl_Random::srand48()
-     * @return integer 48-bit pseudo-random integer.
+     * @return int 48-bit pseudo-random integer.
      */
     public function rand48()
     {
@@ -137,7 +137,7 @@ class Perl_Random
         if (is_null($this->_random_state_48)) {
             $this->srand48();
         }
-        $this->_random_state_48 = (integer)
+        $this->_random_state_48 = (int)
             bcmod(bcadd(bcmul('25214903917', $this->_random_state_48, 0), '11', 0), '281474976710656');
         return $this->_random_state_48;
     }
@@ -162,7 +162,7 @@ class Perl_Random
      * This function has been checked until 8192 only.
      *
      * @uses Perl_Random::_string_rand64()
-     * @param integer $len Max exclusive returned value.
+     * @param int $len Max exclusive returned value.
      * @return float Pseudo-random float.
      */
     public function rand($len = 1)
@@ -174,12 +174,12 @@ class Perl_Random
      * Get a pseudo-random integer to emulate the perl function int(rand()).
      *
      * @uses Perl_Random::_string_rand64()
-     * @param integer $len Max exclusive returned value.
-     * @return integer Pseudo-random integer.
+     * @param int $len Max exclusive returned value.
+     * @return int Pseudo-random integer.
      */
     public function int_rand($len = 1)
     {
-        return (integer) $this->_string_rand64($len);
+        return (int) $this->_string_rand64($len);
     }
 
     /**
@@ -190,7 +190,7 @@ class Perl_Random
      * string (last decimal may differ).
      *
      * @uses Perl_Random::_string_rand64()
-     * @param integer $len Max exclusive returned value.
+     * @param int $len Max exclusive returned value.
      * @return string Pseudo-random float as a string with 15 digits max.
      */
     public function string_rand($len = 1)
@@ -207,12 +207,12 @@ class Perl_Random
      * above 5.20.0 and like in standard implementations before.
      *
      * @uses Perl_Random::drand48()
-     * @param integer $len Max exclusive returned value.
+     * @param int $len Max exclusive returned value.
      * @return string Pseudo-random float as a string with 64 digits.
      */
     private function _string_rand64($len = 1)
     {
-        $length = (integer) $len;
+        $length = (int) $len;
         // Don't use drand48() in order to avoid a conversion to float.
         return bcdiv(bcmul($length ?: '1', $this->rand48(), 0), '281474976710656', 32);
     }
@@ -307,7 +307,7 @@ class Perl_Random
      * This function doesn't use srand() or mt_rand() in order to avoid side
      * effects.
      *
-     * @return integer 48-bit integer.
+     * @return int 48-bit integer.
      */
     private function _random48()
     {
@@ -333,6 +333,6 @@ class Perl_Random
         }
 
         $random = hexdec($hexa) & 0xFFFFFFFFFFFF;
-        return (integer) $random;
+        return (int) $random;
     }
 }

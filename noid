@@ -165,7 +165,7 @@ $args = $do->getOnlyArguments($args, $options);
 $options = $do->unifyOptionsAsLong($options);
 
 if (isset($options['locktest'])) {
-    $locktest = (integer) $options['locktest'];
+    $locktest = (int) $options['locktest'];
     if ($locktest < 0) {
         print 'error: locktest value must be a positive number of seconds to sleep' . PHP_EOL;
         // NOTE Why exit 0 for an error in Perl script (and somewhere else)?
@@ -369,7 +369,7 @@ class NoidDo
      * @param string $id
      * @param string $elem
      * @param string $value
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function bind($how = null, $id = null, $elem = null, $value = null)
     {
@@ -549,7 +549,7 @@ class NoidDo
      * @param string $naan
      * @param string $naa
      * @param string $subnaa
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function dbcreate($template = null, $policy = null, $naan = null, $naa = null, $subnaa = null)
     {
@@ -570,7 +570,7 @@ class NoidDo
      * Return infos about database.
      *
      * @param string $level
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function dbinfo($level = null)
     {
@@ -594,7 +594,7 @@ class NoidDo
      *
      * @param string $id
      * @param array|string $elems All arguments will be fetchedif not an array.
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function fetch($id = null, $elems = array())
     {
@@ -611,7 +611,7 @@ class NoidDo
      *
      * @param string $id
      * @param array|string $elems All arguments will be gotten if not an array.
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function get($id = null, $elems = array())
     {
@@ -626,10 +626,10 @@ class NoidDo
     /**
      * Helper to get/fetch elements.
      *
-     * @param integer $verbose
+     * @param int $verbose
      * @param string $id
      * @param array $elems
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     protected function _getfetch($verbose, $id, $elems)
     {
@@ -659,7 +659,7 @@ class NoidDo
      * Get a user note from a key.
      *
      * @param string $key
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function get_note($key)
     {
@@ -696,7 +696,7 @@ class NoidDo
      * Return help about a command.
      *
      * @param string $topic
-     * @return integer 1 (success)
+     * @return int 1 (success)
      */
     public function help($topic = '')
     {
@@ -716,7 +716,7 @@ class NoidDo
      *
      * @param string $on_off "hold" or "release"
      * @param array|string $ids All arguments will be processed if not an array.
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function hold($on_off = null, $ids = array())
     {
@@ -751,7 +751,7 @@ class NoidDo
      * @param string $n
      * @param string $elem
      * @param string $value
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function peppermint($n = 0, $elem = null, $value = null)
     {
@@ -761,11 +761,11 @@ class NoidDo
     /**
      * Mint a noid.
      *
-     * @param integer $n
+     * @param int $n
      * @param string $elem
      * @param string $value
-     * @param boolean $pepper
-     * @return integer 0 (error) or 1 (success)
+     * @param bool $pepper
+     * @return int 0 (error) or 1 (success)
      */
     public function mint($n = null, $elem = null, $value = null, $pepper = 0)
     {
@@ -808,7 +808,7 @@ class NoidDo
      *
      * @param string $key
      * @param string $value
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function note($key = '', $value = '')
     {
@@ -835,7 +835,7 @@ class NoidDo
      *
      * @param string $when
      * @param array|string $ids All arguments will be queued if not an array.
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function queue($when = null, $ids = array())
     {
@@ -874,7 +874,7 @@ class NoidDo
      *
      * @param string $template
      * @param array|string $ids All arguments will be validated if not an array.
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     public function validate($template = null, $ids = array())
     {
@@ -913,7 +913,7 @@ class NoidDo
      *
      * @param resource $out
      * @param string|array $args
-     * @return integer|boolean False if error.
+     * @return int|bool False if error.
      */
     protected function _bprint($out, $args)
     {
@@ -925,10 +925,10 @@ class NoidDo
     /**
      * Print a message about a topic.
      *
-     * @param integer $in_error
-     * @param integer $brief
+     * @param int $in_error
+     * @param int $brief
      * @param string $topic
-     * @return integer Always returns 1 so it can be used in boolean blocks.
+     * @return int Always returns 1 so it can be used in boolean blocks.
      */
     public function usage($in_error = null, $brief = null, $topic = null)
     {
@@ -1095,7 +1095,7 @@ EOD;
     /**
      * Helper to manage help messages.
      *
-     * @return integer 1
+     * @return int 1
      */
     protected function _init_help()
     {
@@ -1210,7 +1210,7 @@ EOD;
     /**
      * Return info about user running noid.
      *
-     * @param integer $web
+     * @param int $web
      * @return string
      */
     public function who_are_you($web = 0)
@@ -1260,7 +1260,7 @@ EOD;
      * Get options from the command line or the web request.
      *
      * @link https://php.net/manual/en/function.getopt.php#113015
-     * @return array|boolean
+     * @return array|bool
      */
     public function getoptreq()
     {

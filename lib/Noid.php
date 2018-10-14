@@ -358,7 +358,7 @@ class Noid
      *
      * @param string $noid
      * @param string $message
-     * @return integer 1
+     * @return int 1
      */
     static public function addmsg($noid, $message)
     {
@@ -401,7 +401,7 @@ class Noid
      *
      * @param string $noid
      * @param string $message
-     * @return integer 1
+     * @return int 1
      */
     static public function logmsg($noid, $message)
     {
@@ -423,7 +423,7 @@ class Noid
      *
      * @param string $fname
      * @param string $contents
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static protected function _storefile($filename, $contents)
     {
@@ -455,7 +455,7 @@ class Noid
      * Returns the status, the output and the errors of an external command.
      *
      * @param string $cmd
-     * @param integer $status
+     * @param int $status
      * @param string $output
      * @param string $errors
      * @return void
@@ -918,7 +918,7 @@ class Noid
         dba_replace("$R/mask", $mask, $db);
         dba_replace("$R/firstpart", ($naan ? $naan . '/' : '') . $prefix, $db);
 
-        $add_cc = (boolean) preg_match('/k$/', $mask);    # boolean answer
+        $add_cc = (bool) preg_match('/k$/', $mask);    # boolean answer
         dba_replace("$R/addcheckchar", $add_cc, $db);
         if ($add_cc) {
             // The template is already checked, so no error is possible.
@@ -1131,7 +1131,7 @@ NAAN:      $naan
      * - "brief" (default): user vals and interesting admin vals
      * - "full": user vals and all admin vals
      * - "dump": all vals, including all identifier bindings
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static public function dbinfo($noid, $level = 'brief')
     {
@@ -1189,7 +1189,7 @@ NAAN:      $naan
      * BerkeleyDB features.  For now, lock before tie(), unlock after untie().
      *
      * @todo eventually we would like to do fancy fine-grained locking with
-     * @return integer 1.
+     * @return int 1.
      */
     static protected function _dblock()
     {
@@ -1201,7 +1201,7 @@ NAAN:      $naan
      * BerkeleyDB features.  For now, lock before tie(), unlock after untie().
      *
      * @todo eventually we would like to do fancy fine-grained locking with
-     * @return integer 1.
+     * @return int 1.
      */
     static protected function _dbunlock()
     {
@@ -1216,7 +1216,7 @@ NAAN:      $naan
      * @todo Berkeley specific environment flags are not supported.
      *
      * @param string $dbname
-     * @param integer $flags
+     * @param int $flags
      * Can be DB_RDONLY, DB_CREATE, or DB_WRITE (the default).
      * Support for perl script: DB_RDONLY, DB_CREAT and DB_RDWR, without bit
      * checking. Other flags are not managed.
@@ -1395,7 +1395,7 @@ NAAN:      $naan
      * This exists only for the purpose of testing the locking mechanism.
      *
      * @param string $sleepvalue
-     * @return integer 1
+     * @return int 1
      */
     static public function locktest($sleepvalue)
     {
@@ -1443,7 +1443,7 @@ NAAN:      $naan
      * @param string $noid
      * @param string $key
      * @param string $value
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static protected function _eachnoid($noid, &$key, &$value)
     {
@@ -1471,7 +1471,7 @@ NAAN:      $naan
      *       eg, for smart multiple resolution??
      *
      * @param string $noid
-     * @param integer $verbose is 1 if we want labels, 0 if we don't
+     * @param int $verbose is 1 if we want labels, 0 if we don't
      * @param string $id
      * @param array|string $elems
      * @return string List of elements separated by an end of line.
@@ -1828,7 +1828,7 @@ NAAN:      $naan
      * repertoire is "e". The prefix isn't checked here but in parse_template().
      *
      * @param $template
-     * @return string|boolean The label of the alphabet, or true if the template
+     * @return string|bool The label of the alphabet, or true if the template
      * doesn't require a check character, or false if error.
      */
     static public function get_alphabet($template)
@@ -1954,7 +1954,7 @@ NAAN:      $naan
      * @param string $contact
      * @param string $on_off
      * @param array|string $ids
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      * Sets errmsg() in either case.
      */
     static public function hold($noid, $contact, $on_off, $ids)
@@ -2053,7 +2053,7 @@ NAAN:      $naan
      *
      * @param string $noid
      * @param string $id
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static public function hold_set($noid, $id)
     {
@@ -2087,7 +2087,7 @@ NAAN:      $naan
      *
      * @param string $noid
      * @param string $id
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static public function hold_release($noid, $id)
     {
@@ -2115,7 +2115,7 @@ NAAN:      $naan
      * Return printable form of an integer after adding commas to separate
      * groups of 3 digits.
      *
-     * @param integer $num
+     * @param int $num
      * @return string
      */
     static protected function _human_num($num)
@@ -2504,7 +2504,7 @@ NAAN:      $naan
      * @param string $contact
      * @param string $key
      * @param string $value
-     * @return integer 0 (error) or 1 (success)
+     * @return int 0 (error) or 1 (success)
      */
     static public function note($noid, $contact, $key, $value)
     {
@@ -2537,7 +2537,7 @@ NAAN:      $naan
      * converted to '+' in the returned string; post-processing will eventually
      * turn it into a computed check character.
      *
-     * @param integer $num
+     * @param int $num
      * @param string $mask
      * @return string
      */
@@ -2606,7 +2606,7 @@ NAAN:      $naan
      * @param string $mask
      * @param string $gen_type
      * @param string $message
-     * @return integer -1 for no limit, 0 for error, else the total.
+     * @return int -1 for no limit, 0 for error, else the total.
      */
     static public function parse_template($template, &$prefix, &$mask, &$gen_type, &$message)
     {
@@ -2985,7 +2985,7 @@ NAAN:      $naan
      * Generate a sample id for testing purposes.
      *
      * @param string $noid
-     * @param integer $num
+     * @param int $num
      * @return string
      */
     static public function sample($noid, $num = null)
@@ -3024,7 +3024,7 @@ NAAN:      $naan
      * Scopes.
      *
      * @param string $noid
-     * @return integer 1
+     * @return int 1
      */
     static public function scope($noid)
     {
@@ -3092,7 +3092,7 @@ NAAN:      $naan
      * Return local date/time stamp in TEMPER format.  Use supplied time (in seconds)
      * if any, or the current time.
      *
-     * @param integer $time
+     * @param int $time
      * @return string
      */
     static protected function _temper($time = null)
