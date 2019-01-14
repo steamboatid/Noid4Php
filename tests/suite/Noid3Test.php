@@ -1,7 +1,7 @@
 <?php
 /**
- * @author Michael A. Russell
- * @author Daniel Berthereau (conversion to Php)
+ * @author  Michael A. Russell
+ * @author  Daniel Berthereau (conversion to Php)
  * @package Noid
  */
 
@@ -32,51 +32,56 @@ require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'NoidTestCase.php';
  *
  * ------------------------------------
  */
-class Noid3Test extends NoidTestCase
-{
-    public function testNoid3()
-    {
-        # Start off by doing a dbcreate.
-        # First, though, make sure that the BerkeleyDB files do not exist.
-        $cmd = "{$this->rm_cmd} ; " .
-            "{$this->noid_cmd} dbcreate tst3.rde long 13030 cdlib.org noidTest >/dev/null";
-        $this->_executeCommand($cmd, $status, $output, $errors);
-        $this->assertEquals(0, $status);
+class Noid3Test extends NoidTestCase{
+	const dbtype = 'bdb';
 
-        # Check that the "NOID" subdirectory was created.
-        $this->assertFileExists($this->noid_dir, 'no minter directory created, stopped');
-        # echo 'NOID was created';
+	/**
+	 * @throws Exception
+	 */
+	public function testNoid3()
+	{
+		$noid_cmd = $this->cmd . ' -f ' . $this->dir . ' ' . ' -t ' . self::dbtype . ' ';
+		# Start off by doing a dbcreate.
+		# First, though, make sure that the BerkeleyDB files do not exist.
+		$cmd = "{$this->rm_cmd} ; " .
+			"{$noid_cmd} dbcreate tst3.rde long 13030 cdlib.org noidTest >/dev/null";
+		$this->_executeCommand($cmd, $status, $output, $errors);
+		$this->assertEquals(0, $status);
 
-        # That "NOID" is a directory.
-        $this->assertTrue(is_dir($this->noid_dir), 'NOID is not a directory, stopped');
-        # echo 'NOID is a directory';
+		# Check that the "NOID" subdirectory was created.
+		$this->assertFileExists($this->noid_dir, 'no minter directory created, stopped');
+		# echo 'NOID was created';
 
-        # Check for the presence of the "README" file, then "log" file, then the
-        # "logbdb" file within "NOID".
-        $this->assertFileExists($this->noid_dir . 'README');
-        # echo 'NOID/README was created';
-        $this->assertFileExists($this->noid_dir . 'log');
-        # echo 'NOID/log was created';
-        $this->assertFileExists($this->noid_dir . 'logbdb');
-        # echo 'NOID/logbdb was created';
+		# That "NOID" is a directory.
+		$this->assertTrue(is_dir($this->noid_dir), 'NOID is not a directory, stopped');
+		# echo 'NOID is a directory';
 
-        # Check for the presence of the BerkeleyDB file within "NOID".
-        $this->assertFileExists($this->noid_dir . 'noid.bdb', 'minter initialization failed, stopped');
-        # echo 'NOID/noid.bdb was created';
+		# Check for the presence of the "README" file, then "log" file, then the
+		# "logbdb" file within "NOID".
+		$this->assertFileExists($this->noid_dir . 'README');
+		# echo 'NOID/README was created';
+		$this->assertFileExists($this->noid_dir . 'log');
+		# echo 'NOID/log was created';
+		$this->assertFileExists($this->noid_dir . 'logbdb');
+		# echo 'NOID/logbdb was created';
 
-        # Hold first and second identifiers.
-        $cmd = "{$this->noid_cmd} hold set 13030/tst31q 13030/tst30f > /dev/null";
-        $this->_executeCommand($cmd, $status, $output, $errors);
-        $this->assertEquals(0, $status);
+		# Check for the presence of the BerkeleyDB file within "NOID".
+		$this->assertFileExists($this->noid_dir . 'noid.bdb', 'minter initialization failed, stopped');
+		# echo 'NOID/noid.bdb was created';
 
-        # Mint 1.
-        $cmd = "{$this->noid_cmd} mint 1";
-        $this->_executeCommand($cmd, $status, $output, $errors);
-        $this->assertEquals(0, $status);
+		# Hold first and second identifiers.
+		$cmd = "{$noid_cmd} hold set 13030/tst31q 13030/tst30f > /dev/null";
+		$this->_executeCommand($cmd, $status, $output, $errors);
+		$this->assertEquals(0, $status);
 
-        # Verify that it's the third one.
-        $noid_output = trim($output);
-        $this->assertEquals('id: 13030/tst394', $noid_output);
-        # echo 'held two, minted one, got the third one';
-    }
+		# Mint 1.
+		$cmd = "{$noid_cmd} mint 1";
+		$this->_executeCommand($cmd, $status, $output, $errors);
+		$this->assertEquals(0, $status);
+
+		# Verify that it's the third one.
+		$noid_output = trim($output);
+		$this->assertEquals('id: 13030/tst394', $noid_output);
+		# echo 'held two, minted one, got the third one';
+	}
 }

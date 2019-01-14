@@ -1,0 +1,32 @@
+# Creation record for the identifier generator by Noid.Lib.Storage.BerkeleyDB.
+# All the logs are placed in /work/Noid/Noid4Php-mordernized/datafiles/NOID.
+erc:
+who:       root/
+what:      3721 random identifiers of form b.rllk
+       A Noid minting and binding database has been created that will bind 
+       and mint 3,721 identifiers with the template "b.rllk".
+       Sample identifiers would be "99999/b2qr" and "99999/b3H4".
+       Minting order is random.
+when:      20190113210734
+where:     localhost.localdomain:/work/Noid/Noid4Php-mordernized/datafiles
+Version:   Noid 1.1.1-0.424-php
+Size:      3721
+Template:  b.rllk
+       A suggested parent directory for this template is "noid_b3".  Note:
+       separate minters need separate directories, and templates can suggest
+       short names; e.g., the template "xz.redek" suggests the parent directory
+       "noid_xz4" since identifiers are "xz" followed by 4 characters.
+Policy:    (:GRANIT-)
+       This minter's durability summary is (maximum possible being "GRANITE")
+         "GRANIT-", which breaks down, property by property, as follows.
+          ^^^^^^^
+          |||||||__ not (E)lided of vowels to avoid creating words by accident
+          ||||||______ (T)ranscription safe due to a generated check character
+          |||||______ (I)mpression safe from ignorable typesetter-added hyphens
+          ||||______ (N)on-reassignable in life of Name Assigning Authority
+          |||______ (A)lphabetic-run-limited to pairs to avoid acronyms
+          ||______ (R)andomly sequenced to avoid series semantics
+          |______ (G)lobally unique within a registered namespace (currently
+                     tests only ARK namespaces; apply for one at ark@cdlib.org)
+Authority: example.org | noidTest
+NAAN:      99999
