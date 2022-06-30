@@ -176,7 +176,7 @@ if(!class_exists('NoidApp')){
 		 *
 		 * @return bool TRUE - successful execution, FALSE - error
 		 */
-		public function run($argv)
+		public function run(array $argv): bool
 		{
 			// this setting is just for the function strftime() in Helper::getTemper().
 			date_default_timezone_set('UTC');
@@ -371,9 +371,9 @@ if(!class_exists('NoidApp')){
 		/**
 		 * @param array $args
 		 *
-		 * @return int|mixed
+		 * @return mixed
 		 */
-		public function command($args = array())
+		public function command(array $args = array()): mixed
 		{
 			// Any remaining args should form a noid command.
 			// Look at the command part (if any) now, and complain about
@@ -428,7 +428,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function bind($how = NULL, $id = NULL, $elem = NULL, $value = NULL)
+		public function bind(string $how = '', $id = '', string $elem = '', string $value = ''): int
 		{
 			$validate = 1;
 			$noid = Db::dbopen($this->dbdir, DatabaseInterface::DB_WRITE);
@@ -586,7 +586,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function dbcreate($template = NULL, $policy = NULL, $naan = NULL, $naa = NULL, $subnaa = NULL)
+		public function dbcreate(string $template = '', string $policy = '', string $naan = '', string $naa = '', string $subnaa = ''): int
 		{
 			$dbreport = Db::dbcreate($this->dbdir, $this->contact, $template, $policy,
 				$naan, $naa, $subnaa);
@@ -604,9 +604,9 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function dbimport($src_type)
+		public function dbimport(string $src_type): int
 		{
-			if(!isset($src_type)){
+			if(!empty($src_type)){
 				print "Missing argument for dbimport. (xml/bdb/mysql)" . PHP_EOL;
 				return 0;
 			}
@@ -633,7 +633,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function dbinfo($level = NULL)
+		public function dbinfo(string $level = ''): int
 		{
 			if(empty($level)){
 				$level = 'brief';
@@ -657,7 +657,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function fetch($id = NULL, $elems = array())
+		public function fetch(string $id = '', array|string $elems = array()): int
 		{
 			if(!is_array($elems)){
 				$elems = func_get_args();
@@ -676,7 +676,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function get($id = NULL, $elems = array())
+		public function get($id = NULL, $elems = array()): int
 		{
 			if(!is_array($elems)){
 				$elems = func_get_args();
@@ -696,7 +696,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		private function _getfetch($verbose, $id, $elems)
+		private function _getfetch(int $verbose, string $id, array $elems): int
 		{
 			$noid = Db::dbopen($this->dbdir, DatabaseInterface::DB_RDONLY);
 			if(!$noid){
@@ -725,7 +725,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function get_note($key)
+		public function get_note(string $key): int
 		{
 			$noid = Db::dbopen($this->dbdir, DatabaseInterface::DB_RDONLY);
 			if(!$noid){
@@ -760,7 +760,7 @@ if(!class_exists('NoidApp')){
 		 *
 		 * @return int 1 (success)
 		 */
-		public function help($topic = '')
+		public function help(string $topic = ''): int
 		{
 			$in_error = 0;
 			$brief = 0;
@@ -782,7 +782,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function hold($on_off = NULL, $ids = array())
+		public function hold(string $on_off = NULL, array|string $ids = array()): int
 		{
 			if(!is_array($ids)){
 				$ids = func_get_args();
@@ -815,7 +815,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function peppermint($n = 0, $elem = NULL, $value = NULL)
+		public function peppermint(int $n = 0, string $elem = '', string $value = ''): int
 		{
 			return $this->mint($n, $elem, $value, TRUE);
 		}
@@ -831,7 +831,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function mint($n = NULL, $elem = NULL, $value = NULL, $pepper = FALSE)
+		public function mint(int $n = 0, string $elem = '', string $value = '', bool $pepper = FALSE): int
 		{
 			if($pepper){
 				fwrite($this->stderr,
@@ -873,7 +873,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function note($key = '', $value = '')
+		public function note(string $key = '', string $value = ''): int
 		{
 			if(!strlen($key) || !strlen($value)){
 				fwrite($this->stderr,
@@ -898,7 +898,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function queue($when = NULL, $ids = array())
+		public function queue(string $when = '', array|string $ids = array()): int
 		{
 			if(!is_array($ids)){
 				$ids = func_get_args();
@@ -937,7 +937,7 @@ if(!class_exists('NoidApp')){
 		 * @return int 0 (error) or 1 (success)
 		 * @throws Exception
 		 */
-		public function validate($template = NULL, $ids = array())
+		public function validate(string $template = '', array|string $ids = array()): int
 		{
 			if(!is_array($ids)){
 				$ids = func_get_args();
@@ -976,7 +976,7 @@ if(!class_exists('NoidApp')){
 		 *
 		 * @return bool|int
 		 */
-		private function _bprint($out, $args)
+		private function _bprint($out, string|array $args): bool|int
 		{
 			$string = is_array($args) ? implode('', $args) : $args;
 			$string = str_replace(PHP_EOL, PHP_EOL . ' ', $string);
@@ -992,7 +992,7 @@ if(!class_exists('NoidApp')){
 		 *
 		 * @return int Always returns 1 so it can be used in boolean blocks.
 		 */
-		private function usage($in_error = NULL, $brief = NULL, $topic = NULL)
+		private function usage(int $in_error = 0, int $brief = 0, string $topic = ''): int
 		{
 			$info = &$this->_info;
 
@@ -1158,7 +1158,7 @@ EOD;
 		 *
 		 * @return int 1
 		 */
-		private function _init_help()
+		private function _init_help(): int
 		{
 			$info = &$this->_info;
 
@@ -1289,7 +1289,7 @@ EOD;
 		 *
 		 * @return string
 		 */
-		private function who_are_you($web = FALSE)
+		private function who_are_you(bool $web = FALSE): string
 		{
 			$user = NULL;
 			if($web){
@@ -1338,7 +1338,7 @@ EOD;
 		 * @link https://php.net/manual/en/function.getopt.php#113015
 		 * @return array|bool
 		 */
-		private function getoptreq()
+		private function getoptreq(): array|bool
 		{
 			// Command line.
 			if(PHP_SAPI === 'cli' || empty($_SERVER['REMOTE_ADDR'])){
@@ -1404,7 +1404,7 @@ EOD;
 		 *
 		 * @return array
 		 */
-		private function getOnlyArguments(array $arguments, array $options)
+		private function getOnlyArguments(array $arguments, array $options): array
 		{
 			$args = array_search('--', $arguments);
 			if($args){
@@ -1438,7 +1438,7 @@ EOD;
 		 *
 		 * @return array Unified options.
 		 */
-		private function unifyOptionsAsLong($options)
+		private function unifyOptionsAsLong(array $options): array
 		{
 			$result = array();
 			$shortopts = array_map(

@@ -22,7 +22,7 @@ class Helper{
 	 *
 	 * @return string
 	 */
-	static public function getTemper($time = NULL)
+	static public function getTemper($time = NULL): string
 	{
 		return strftime('%Y%m%d%H%M%S', $time ? : time());
 	}
@@ -35,7 +35,7 @@ class Helper{
 	 *
 	 * @return string
 	 */
-	static public function formatNumber($num)
+	static public function formatNumber($num): string
 	{
 		return number_format($num);
 	}
@@ -62,10 +62,10 @@ class Helper{
 	 *                         scope()). Default to "e" for compatibility with the Perl script, that
 	 *                         uses only the mask "[de]+".
 	 *
-	 * @return string|null
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function checkChar($id, $alphabet = 'e')
+	static public function checkChar($id, $alphabet = 'e'): string|NULL
 	{
 		if(strlen($id) == 0){
 			return NULL;
@@ -128,7 +128,7 @@ class Helper{
 	 * @return string|bool The label of the alphabet, or true if the template
 	 * doesn't require a check character, or false if error.
 	 */
-	static public function getAlphabet($template)
+	static public function getAlphabet($template): string|bool
 	{
 		# Confirm well-formedness of $mask before proceeding.
 		if(!preg_match('/^([^\.]*)\.([rsz][' . Globals::$repertoires . ']+k?)$/', $template, $matches)){
@@ -185,7 +185,7 @@ class Helper{
 	 * @return int -1 for no limit, 0 for error, else the total.
 	 * @throws Exception
 	 */
-	static public function parseTemplate($template, &$prefix, &$mask, &$gen_type, &$message)
+	static public function parseTemplate($template, &$prefix, &$mask, &$gen_type, &$message): int
 	{
 		$msg = &$message;   # so we can modify $message argument easily
 

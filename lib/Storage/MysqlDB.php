@@ -37,7 +37,8 @@ class MysqlDB implements DatabaseInterface{
 			throw new Exception('NOID requires the extension "Mysql improved" (mysqli).');
 		}
 
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
@@ -64,10 +65,10 @@ class MysqlDB implements DatabaseInterface{
 	 * @param string $name
 	 * @param string $mode
 	 *
-	 * @return mysqli|FALSE
+	 * @return mysqli|bool
 	 * @throws Exception
 	 */
-	public function open($name, $mode)
+	public function open(string $name, string $mode)
 	{
 		if(is_null($this->handle))
 			$this->connect();
@@ -111,16 +112,17 @@ class MysqlDB implements DatabaseInterface{
 		}
 
 		$this->handle->close();
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $key
 	 *
-	 * @return string|FALSE
+	 * @return string|bool
 	 * @throws Exception
 	 */
-	public function get($key)
+	public function get(string $key): string|bool
 	{
 		if(!($this->handle instanceof mysqli)){
 			return FALSE;
@@ -145,7 +147,7 @@ class MysqlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function set($key, $value)
+	public function set(string $key, string $value): bool
 	{
 		if(!($this->handle instanceof mysqli)){
 			return FALSE;
@@ -164,7 +166,7 @@ class MysqlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function delete($key)
+	public function delete(string $key): bool
 	{
 		if(!($this->handle instanceof mysqli)){
 			return FALSE;
@@ -181,7 +183,7 @@ class MysqlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function exists($key)
+	public function exists(string $key): bool
 	{
 		if(!($this->handle instanceof mysqli)){
 			return FALSE;
@@ -190,7 +192,8 @@ class MysqlDB implements DatabaseInterface{
 		$key = htmlspecialchars($key, ENT_QUOTES | ENT_HTML401);
 
 		/** @var mysqli_result $res */
-		if($res = $this->handle->query("SELECT `_key` FROM `" . DatabaseInterface::TABLE_NAME . "` WHERE `_key` = '{$key}'")){
+		$res = $this->handle->query("SELECT `_key` FROM `" . DatabaseInterface::TABLE_NAME . "` WHERE `_key` = '{$key}'");
+		if($res) {
 			if($res->num_rows > 0)
 				return TRUE;
 			else
@@ -204,20 +207,21 @@ class MysqlDB implements DatabaseInterface{
 	 *
 	 * @param string $pattern The pattern of the keys to retrieve (no regex).
 	 *
-	 * @return array Ordered associative array of matching keys and values.
+	 * @return array|NULL Ordered associative array of matching keys and values.
 	 * @throws Exception
 	 */
-	public function get_range($pattern)
+	public function get_range(string $pattern): array|NULL
 	{
 		if(is_null($pattern) || !($this->handle instanceof mysqli)){
 			return NULL;
 		}
 		$results = array();
 
-		/** @var mysqli_result $res */
 		$pattern = htmlspecialchars($pattern, ENT_QUOTES | ENT_HTML401);
 
-		if($res = $this->handle->query("SELECT `_key`, `_value` FROM `" . DatabaseInterface::TABLE_NAME . "` WHERE `_key` LIKE '%{$pattern}%'")){
+		/** @var mysqli_result $res */
+		$res = $this->handle->query("SELECT `_key`, `_value` FROM `" . DatabaseInterface::TABLE_NAME . "` WHERE `_key` LIKE '%{$pattern}%'");
+		if($res){
 			while($row = $res->fetch_array(MYSQLI_NUM)){
 				$key = htmlspecialchars_decode($row[0], ENT_QUOTES | ENT_HTML401);
 				$value = htmlspecialchars_decode($row[1], ENT_QUOTES | ENT_HTML401);
@@ -243,7 +247,7 @@ class MysqlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function import($src_db)
+	public function import(DatabaseInterface $src_db): bool
 	{
 		if(is_null($src_db) || is_null($this->handle) || !($this->handle instanceof mysqli)){
 			return FALSE;

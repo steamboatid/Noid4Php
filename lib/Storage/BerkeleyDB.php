@@ -61,17 +61,18 @@ class BerkeleyDB implements DatabaseInterface{
 			throw new Exception('BerkeleyDB is not installed.');
 		}
 
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $db_dir
 	 * @param string $mode
 	 *
-	 * @return resource|FALSE
+	 * @return mixed
 	 * @throws Exception
 	 */
-	public function open($db_dir, $mode)
+	public function open(string $db_dir, string $mode)
 	{
 		$path = $db_dir . DIRECTORY_SEPARATOR . DatabaseInterface::DATABASE_NAME;
 		$file_path = $path . DIRECTORY_SEPARATOR . DatabaseInterface::TABLE_NAME . '.' . self::FILE_EXT;
@@ -86,7 +87,9 @@ class BerkeleyDB implements DatabaseInterface{
 					1 => array('pipe', 'w'), //STDOUT
 					2 => array('pipe', 'w'), //STDERR
 				);
-				if($proc = proc_open('rm -f ' . $file_path . ' > /dev/null 2>&1', $descriptorSpec, $pipes, getcwd())){
+
+				$cmd = 'rm -f ' . $file_path . ' > /dev/null 2>&1';
+				if ($proc = proc_open($cmd, $descriptorSpec, $pipes, getcwd())) {
 					$output = stream_get_contents($pipes[1]);
 					$errors = stream_get_contents($pipes[2]);
 					foreach($pipes as $pipe){
@@ -130,16 +133,17 @@ class BerkeleyDB implements DatabaseInterface{
 
 		dba_sync($this->handle);
 		dba_close($this->handle);
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $key
 	 *
-	 * @return string|FALSE
+	 * @return string|bool
 	 * @throws Exception
 	 */
-	public function get($key)
+	public function get(string $key): string|bool
 	{
 		if(!is_resource($this->handle)){
 			return FALSE;
@@ -155,7 +159,7 @@ class BerkeleyDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function set($key, $value)
+	public function set(string $key, string $value): bool
 	{
 		if(!is_resource($this->handle)){
 			return FALSE;
@@ -170,7 +174,7 @@ class BerkeleyDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function delete($key)
+	public function delete(string $key): bool
 	{
 		if(!is_resource($this->handle)){
 			return FALSE;
@@ -185,7 +189,7 @@ class BerkeleyDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function exists($key)
+	public function exists(string $key): bool
 	{
 		if(!is_resource($this->handle)){
 			return FALSE;
@@ -203,10 +207,10 @@ class BerkeleyDB implements DatabaseInterface{
 	 *
 	 * @param string $pattern The pattern of the keys to retrieve (no regex).
 	 *
-	 * @return array Ordered associative array of matching keys and values.
+	 * @return array|NULL Ordered associative array of matching keys and values.
 	 * @throws Exception
 	 */
-	public function get_range($pattern)
+	public function get_range(string $pattern): array|NULL
 	{
 		if(is_null($pattern) || !is_resource($this->handle)){
 			return NULL;
@@ -249,7 +253,7 @@ class BerkeleyDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function import($src_db)
+	public function import(DatabaseInterface $src_db): bool
 	{
 		if(is_null($src_db) || is_null($this->handle) || !is_resource($this->handle)){
 			return FALSE;

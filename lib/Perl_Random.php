@@ -71,7 +71,7 @@ class Perl_Random{
 	 * @see self::srand48()
 	 * @var integer
 	 */
-	private $_random_state_48 = NULL;
+	private $_random_state_48 = 0;
 
 	/**
 	 * Perl_Random constructor.
@@ -144,7 +144,7 @@ class Perl_Random{
 	 * @uses self::srand48()
 	 * @return int 48-bit pseudo-random integer.
 	 */
-	public function rand48()
+	public function rand48(): int
 	{
 		// Initialize the random state if this is the first use.
 		if(is_null($this->_random_state_48)){
@@ -164,7 +164,7 @@ class Perl_Random{
 	 * @uses self::rand48()
 	 * @return float Pseudo-random float.
 	 */
-	public function drand48()
+	public function drand48(): float
 	{
 		return (float)bcdiv($this->rand48(), '281474976710656', 32);
 	}
@@ -180,7 +180,7 @@ class Perl_Random{
 	 *
 	 * @return float Pseudo-random float.
 	 */
-	public function rand($len = 1)
+	public function rand($len = 1): float
 	{
 		return (float)$this->_string_rand64($len);
 	}
@@ -194,7 +194,7 @@ class Perl_Random{
 	 *
 	 * @return int Pseudo-random integer.
 	 */
-	public function int_rand($len = 1)
+	public function int_rand($len = 1): int
 	{
 		return (int)$this->_string_rand64($len);
 	}
@@ -212,7 +212,7 @@ class Perl_Random{
 	 *
 	 * @return string Pseudo-random float as a string with 15 digits max.
 	 */
-	public function string_rand($len = 1)
+	public function string_rand($len = 1): string
 	{
 		$result = $this->_string_rand64($len);
 		return $this->_significant15($result);
@@ -231,7 +231,7 @@ class Perl_Random{
 	 *
 	 * @return string Pseudo-random float as a string with 64 digits.
 	 */
-	private function _string_rand64($len = 1)
+	private function _string_rand64($len = 1): string
 	{
 		$length = (int)$len;
 		// Don't use drand48() in order to avoid a conversion to float.
@@ -250,7 +250,7 @@ class Perl_Random{
 	 *
 	 * @return string
 	 */
-	private function _significant15($bcNumber)
+	private function _significant15($bcNumber): string
 	{
 		$significant = 15;
 
@@ -313,7 +313,7 @@ class Perl_Random{
 	 *
 	 * @return string
 	 */
-	private function _removeTrailingZeros($bcNumber)
+	private function _removeTrailingZeros($bcNumber): string
 	{
 		if(strpos($bcNumber, '.') === FALSE){
 			return $bcNumber;
@@ -332,7 +332,7 @@ class Perl_Random{
 	 *
 	 * @return int 48-bit integer.
 	 */
-	private function _random48()
+	private function _random48(): int
 	{
 		// The length is 48 bits, so 6 bytes.
 		$length = 6;

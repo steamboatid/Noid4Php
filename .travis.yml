@@ -17,8 +17,13 @@ php:
   - 5.6
   # aliased to a recent 7.x version
   - 7.0
+  # aliased to a recent 8.0.x version
+  - 8.0
+  # aliased to a recent 8.1.x version
+  - 8.1
   # aliased to a recent hhvm version
   - hhvm
+ 
 # optionally specify a list of environments, for example to test different RDBMS
 before_script:
   - curl -s http://getcomposer.org/installer | php
@@ -34,6 +39,8 @@ matrix:
     - php: hhvm
       env: DB=pgsql  # PDO driver for pgsql is unsupported by HHVM (3rd party install for support)
   allow_failures:
+    - php: 8.1
+    - php: 8.0
     - php: 7.0
     - php: hhvm
 

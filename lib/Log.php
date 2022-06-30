@@ -26,7 +26,7 @@ class Log{
 	 * @return int 1
 	 * @throws Exception
 	 */
-	static public function addmsg($noid, $message)
+	static public function addmsg($noid, $message): int
 	{
 		$noid = $noid ? : ''; # act like a global in case $noid undefined
 		if(isset(Globals::$open_tab['msg'][$noid])){
@@ -48,7 +48,7 @@ class Log{
 	 * @return string
 	 * @throws Exception
 	 */
-	static public function errmsg($noid = NULL, $reset = 0)
+	static public function errmsg($noid = NULL, $reset = 0): string
 	{
 		$noid = $noid ? : ''; # act like a global in case $noid undefined
 		$s = isset(Globals::$open_tab['msg'][$noid]) ? Globals::$open_tab['msg'][$noid] : '';
@@ -67,7 +67,7 @@ class Log{
 	 * @return int 1
 	 * @throws Exception
 	 */
-	static public function logmsg($noid, $message)
+	static public function logmsg($noid, $message): int
 	{
 		$noid = $noid ? : ''; # act like a global in case $noid undefined
 		if(!empty(Globals::$open_tab['log'][$noid])){
@@ -90,7 +90,7 @@ class Log{
 	 * @return int 0 (error) or 1 (success)
 	 * @throws Exception
 	 */
-	static public function note($noid, $contact, $key, $value)
+	static public function note($noid, $contact, $key, $value): int
 	{
 		Noid::init();
 
@@ -122,13 +122,13 @@ class Log{
 	 * @return string The note.
 	 * @throws Exception
 	 */
-	static public function get_note($noid, $key)
+	static public function get_note($noid, $key): string
 	{
 		Noid::init();
 
 		$db = Db::getDb($noid);
 		if(is_null($db)){
-			return NULL;
+			return '';
 		}
 
 		return Db::$engine->get(Globals::_RR . "/" . Globals::_RR . "/$key");
@@ -144,13 +144,13 @@ class Log{
 	 * @return string
 	 * @throws Exception
 	 */
-	static public function getnoid($noid, $varname)
+	static public function getnoid($noid, $varname): string
 	{
 		Noid::init();
 
 		$db = Db::getDb($noid);
 		if(is_null($db)){
-			return NULL;
+			return '';
 		}
 
 		return Db::$engine->get(Globals::_RR . "/$varname");

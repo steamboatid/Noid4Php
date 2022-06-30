@@ -51,10 +51,10 @@ class Db{
 	 * @param string $naa
 	 * @param string $subnaa
 	 *
-	 * @return string
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function dbcreate($dbdir, $contact, $template = NULL, $term = '-', $naan = '', $naa = '', $subnaa = '')
+	static public function dbcreate($dbdir, $contact, $template = NULL, $term = '-', $naan = '', $naa = '', $subnaa = ''): string|NULL
 	{
 		Noid::init();
 
@@ -346,10 +346,10 @@ NAAN:      $naan
 	 * Support for perl script: DB_RDONLY, DB_CREAT and DB_RDWR, without bit
 	 * checking. Other flags are not managed.
 	 *
-	 * @return string
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function dbopen($dbdir, $flags = DatabaseInterface::DB_WRITE)
+	static public function dbopen($dbdir, $flags = DatabaseInterface::DB_WRITE): string|NULL
 	{
 		Noid::init();
 
@@ -448,7 +448,7 @@ NAAN:      $naan
 	 * @return bool
 	 * @throws Exception
 	 */
-	static public function dbimport($dbdir, $src_type)
+	static public function dbimport($dbdir, $src_type): bool
 	{
 		// Assume followings
 		// 1. both source and destination db are placed in same directory.
@@ -488,7 +488,7 @@ NAAN:      $naan
 	 * @return int 0 (error) or 1 (success)
 	 * @throws Exception
 	 */
-	static public function dbinfo($noid, $level = 'brief')
+	static public function dbinfo($noid, $level = 'brief'): int
 	{
 		Noid::init();
 
@@ -542,10 +542,10 @@ NAAN:      $naan
 	 *
 	 * @param string $noid Full path to the database file.
 	 *
-	 * @return resource|NULL Handle to the database resource, else null.
+	 * @return mixed Handle to the database resource, else null.
 	 * @throws Exception
 	 */
-	static public function getDb($noid)
+	static public function getDb($noid): mixed
 	{
 		if(!isset(Globals::$open_tab['database'][$noid])){
 			Log::addmsg($noid, sprintf('error: Database "%s" is not opened.', $noid));
@@ -565,7 +565,7 @@ NAAN:      $naan
 	 * @todo eventually we would like to do fancy fine-grained locking with
 	 * @return int 1.
 	 */
-	static public function _dblock()
+	static public function _dblock(): int
 	{
 		// Placeholder.
 		return 1;
@@ -577,7 +577,7 @@ NAAN:      $naan
 	 * @todo eventually we would like to do fancy fine-grained locking with
 	 * @return int 1.
 	 */
-	static public function _dbunlock()
+	static public function _dbunlock(): int
 	{
 		// Placeholder.
 		return 1;
@@ -587,12 +587,12 @@ NAAN:      $naan
 	 * Call with number of seconds to sleep at end of each open.
 	 * This exists only for the purpose of testing the locking mechanism.
 	 *
-	 * @param string $sleepvalue
+	 * @param int $sleepvalue
 	 *
 	 * @return int 1
 	 * @throws Exception
 	 */
-	static public function locktest($sleepvalue)
+	static public function locktest(int $sleepvalue): int
 	{
 		Noid::init();
 
@@ -669,11 +669,11 @@ NAAN:      $naan
 	 * @return string
 	 * @throws Exception
 	 */
-	static public function sample($noid, $num = NULL)
+	static public function sample($noid, $num = NULL): string
 	{
 		$db = self::getDb($noid);
 		if(is_null($db)){
-			return NULL;
+			return '';
 		}
 
 		$upper = NULL;
@@ -705,7 +705,7 @@ NAAN:      $naan
 	 * @return int 1
 	 * @throws Exception
 	 */
-	static public function scope($noid)
+	static public function scope($noid): int
 	{
 		Noid::init();
 

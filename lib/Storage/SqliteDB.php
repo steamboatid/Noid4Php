@@ -43,17 +43,18 @@ class SqliteDB implements DatabaseInterface{
 			throw new Exception('NOID requires the extension "SQLite3".');
 		}
 
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $db_dir
 	 * @param string $mode
 	 *
-	 * @return SQLite3|FALSE
+	 * @return SQLite3|bool
 	 * @throws Exception
 	 */
-	public function open($db_dir, $mode)
+	public function open(string $db_dir, string $mode): SQLite3|bool
 	{
 		$path = $db_dir . DIRECTORY_SEPARATOR . DatabaseInterface::DATABASE_NAME;
 		$file_path = $path . DIRECTORY_SEPARATOR . DatabaseInterface::TABLE_NAME . '.' . self::FILE_EXT;
@@ -86,16 +87,17 @@ class SqliteDB implements DatabaseInterface{
 		}
 
 		$this->handle->close();
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $key
 	 *
-	 * @return string|FALSE
+	 * @return string|bool
 	 * @throws Exception
 	 */
-	public function get($key)
+	public function get(string $key): string|bool
 	{
 		if(is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return FALSE;
@@ -119,7 +121,7 @@ class SqliteDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function set($key, $value)
+	public function set(string $key, string $value): bool
 	{
 		if(is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return FALSE;
@@ -138,7 +140,7 @@ class SqliteDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function delete($key)
+	public function delete(string $key): bool
 	{
 		if(is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return FALSE;
@@ -155,7 +157,7 @@ class SqliteDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function exists($key)
+	public function exists(string $key): bool
 	{
 		if(is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return FALSE;
@@ -178,19 +180,19 @@ class SqliteDB implements DatabaseInterface{
 	 *
 	 * @param string $pattern The pattern of the keys to retrieve (no regex).
 	 *
-	 * @return array Ordered associative array of matching keys and values.
+	 * @return array|NULL Ordered associative array of matching keys and values.
 	 * @throws Exception
 	 */
-	public function get_range($pattern)
+	public function get_range(string $pattern): array|NULL
 	{
 		if(is_null($pattern) || is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return NULL;
 		}
 		$results = array();
 
-		/** @var SQLite3Result $res */
 		$pattern = htmlspecialchars($pattern, ENT_QUOTES | ENT_HTML401);
 
+		/** @var SQLite3Result $res */
 		$res = $this->handle->query("SELECT `_key`, `_value` FROM `" . DatabaseInterface::TABLE_NAME . "` WHERE `_key` LIKE '%{$pattern}%'");
 
 		while($row = $res->fetchArray(SQLITE3_NUM)){
@@ -218,7 +220,7 @@ class SqliteDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function import($src_db)
+	public function import(DatabaseInterface $src_db): bool
 	{
 		if(is_null($src_db) || is_null($this->handle) || !($this->handle instanceof SQLite3)){
 			return FALSE;

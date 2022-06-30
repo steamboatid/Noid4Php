@@ -1,0 +1,41 @@
+parameters:
+	checkUninitializedProperties: false
+	checkMissingIterableValueType: false
+	checkInternalClassCaseSensitivity: false
+	checkFunctionNameCase: true
+	checkExplicitMixedMissingReturn: true
+	checkAlwaysTrueStrictComparison: false
+	treatPhpDocTypesAsCertain: false
+	reportUnmatchedIgnoredErrors: false
+	level: 3
+	tmpDir: /dev/shm/phpstan
+
+	fileExtensions:
+		- php
+		- inc
+
+	parallel:
+		maximumNumberOfProcesses: 8
+
+	bootstrapFiles:
+#		- tests/phpstan-bootstrap.php
+
+	scanDirectories:
+		- lib
+
+	excludePaths:
+		- vendor
+		- tests
+
+	ignoreErrors:
+		- '#Access to an undefined property object\:\:.*#'
+		- '#Variable.*in empty.*$#'
+		- '#Variable.*on left side of \?.*$#'
+		- '#Variable \$_REQUEST in isset.*$#'
+#		- '#Variable.*might not be defined.$#'
+#		- '#.*has invalid typehint type type#'
+#		- '#.*has no return typehint specified#'
+#		- '#.*with no typehint specified#'
+#		- '#.*PHPDoc.*#'
+
+	dynamicConstantNames:

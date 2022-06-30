@@ -28,7 +28,7 @@ class Generator{
 	 * @return string
 	 * @throws Exception
 	 */
-	static public function n2xdig($num, $mask)
+	static public function n2xdig(int $num, string $mask): string
 	{
 		$s = '';
 		$div = NULL;
@@ -88,7 +88,7 @@ class Generator{
 	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function _genid($noid)
+	static public function _genid(string $noid): string|NULL
 	{
 		$db = Db::getDb($noid);
 		if(is_null($db)){
@@ -188,19 +188,22 @@ class Generator{
 		}
 
 		$sctrn = $saclist[$randn];   # at random; then pull its $n
-		$n = substr($sctrn, 1);  # numeric equivalent from the name
+		$n = (int)substr($sctrn, 1);  # numeric equivalent from the name
 		#print "randn=$randn, sctrn=$sctrn, counter n=$n\t";
-		$sctr = Db::$engine->get(Globals::_RR."/$sctrn/value"); # and get its value
-		$sctr++;                # increment and
+		
+		$sctr = (int)Db::$engine->get(Globals::_RR."/$sctrn/value"); # and get its value
+		$sctr++;
+
+		# increment and
 		Db::$engine->set(Globals::_RR."/$sctrn/value", $sctr);    # store new current value
 		Db::$engine->set(Globals::_RR."/oacounter", Db::$engine->get(Globals::_RR."/oacounter") + 1);       # incr overall counter - some
 		# redundancy for sanity's sake
 
 		# deal with an exhausted subcounter
 		if($sctr >= Db::$engine->get(Globals::_RR."/$sctrn/top")){
-			/** @var string $c */
 			$modsaclist = '';
 			# remove from active counters list
+			/** @var string $c */
 			foreach($saclist as $c){     # drop $sctrn, but add it to
 				if($c === $sctrn){     # inactive subcounters
 					continue;
@@ -213,8 +216,9 @@ class Generator{
 		}
 
 		# $sctr holds counter value, $n holds ordinal of the counter itself
+		$pc = (int)Db::$engine->get(Globals::_RR."/percounter");
 		$id = self::n2xdig(
-			$sctr + ($n * Db::$engine->get(Globals::_RR."/percounter")),
+			$sctr + ($n * $pc),
 			Db::$engine->get(Globals::_RR . "/mask"));
 		Db::_dbunlock();
 		return $id;

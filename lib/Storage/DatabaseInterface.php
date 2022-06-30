@@ -46,10 +46,10 @@ interface DatabaseInterface{
 	 * @param string $name
 	 * @param string $mode
 	 *
-	 * @return resource|object|FALSE
+	 * @return mixed
 	 * @throws Exception
 	 */
-	public function open($name, $mode);
+	public function open(string $name, string $mode): mixed;
 
 	/**
 	 * Close the storage.
@@ -72,17 +72,17 @@ interface DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function import($src_db);
+	public function import(DatabaseInterface $src_db): bool;
 
 	/**
 	 * Get a value by a key.
 	 *
 	 * @param string   $key
 	 *
-	 * @return string|FALSE
+	 * @return string|bool
 	 * @throws Exception
 	 */
-	public function get($key);
+	public function get(string $key): string|bool;
 
 	/**
 	 * Set/insert a value into a key.
@@ -93,7 +93,7 @@ interface DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function set($key, $value);
+	public function set(string $key, string $value): bool;
 
 	/**
 	 * Delete a record by a key.
@@ -103,7 +103,7 @@ interface DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function delete($key);
+	public function delete(string $key): bool;
 
 	/**
 	 * Check whether a record is exists.
@@ -113,15 +113,15 @@ interface DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function exists($key);
+	public function exists(string $key): bool;
 
 	/**
 	 * Get an array of values containing the pattern(no regexp).
 	 *
 	 * @param string          $pattern
 	 *
-	 * @return array
+	 * @return array|NULL
 	 * @throws Exception
 	 */
-	public function get_range($pattern);
+	public function get_range(string $pattern): array|NULL;
 }

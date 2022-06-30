@@ -148,10 +148,10 @@ class Noid{
 	 * @param string $elem
 	 * @param string $value
 	 *
-	 * @return string
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function bind($noid, $contact, $validate, $how, $id, $elem, $value)
+	static public function bind($noid, $contact, $validate, $how, $id, $elem, $value): string|NULL
 	{
 		self::init();
 
@@ -327,10 +327,10 @@ class Noid{
 	 * @param string       $id
 	 * @param array|string $elems
 	 *
-	 * @return string List of elements separated by an end of line.
+	 * @return string|NULL List of elements separated by an end of line.
 	 * @throws Exception
 	 */
-	static public function fetch($noid, $verbose, $id, $elems)
+	static public function fetch($noid, $verbose, $id, $elems): string|NULL
 	{
 		self::init();
 
@@ -423,10 +423,10 @@ class Noid{
 	 * @param string $contact
 	 * @param int    $pepper
 	 *
-	 * @return string
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static public function mint($noid, $contact, $pepper = 0)
+	static public function mint($noid, $contact, $pepper = 0): string|NULL
 	{
 		self::init();
 
@@ -722,10 +722,10 @@ class Noid{
 	 * @param string       $when
 	 * @param array|string $ids
 	 *
-	 * @return array
+	 * @return array|NULL
 	 * @throws Exception
 	 */
-	static public function queue($noid, $contact, $when, $ids)
+	static public function queue($noid, $contact, $when, $ids): array|NULL
 	{
 		self::init();
 
@@ -940,10 +940,10 @@ class Noid{
 	 * @param string       $template
 	 * @param array|string $ids
 	 *
-	 * @return array
+	 * @return array|NULL
 	 * @throws Exception
 	 */
-	static public function validate($noid, $template, $ids)
+	static public function validate($noid, $template, $ids): array|NULL
 	{
 		self::init();
 
@@ -1103,7 +1103,7 @@ class Noid{
 	 * Sets errmsg() in either case.
 	 * @throws Exception
 	 */
-	static public function hold($noid, $contact, $on_off, $ids)
+	static public function hold($noid, $contact, $on_off, $ids): int
 	{
 		self::init();
 
@@ -1203,7 +1203,7 @@ class Noid{
 	 * @return int 0 (error) or 1 (success)
 	 * @throws Exception
 	 */
-	static public function hold_set($noid, $id)
+	static public function hold_set($noid, $id): int
 	{
 		self::init();
 
@@ -1237,7 +1237,7 @@ class Noid{
 	 * @return int 0 (error) or 1 (success)
 	 * @throws Exception
 	 */
-	static public function hold_release($noid, $id)
+	static public function hold_release($noid, $id): int
 	{
 		self::init();
 
@@ -1276,7 +1276,7 @@ class Noid{
 	 * of 'i', 'q', or 'u'.  Returns the empty string on error.
 	 * @throws Exception
 	 */
-	static protected function _get_circ_svec($noid, $id)
+	static protected function _get_circ_svec($noid, $id): string
 	{
 		$db = Db::getDb($noid);
 		if(is_null($db)){
@@ -1325,10 +1325,10 @@ class Noid{
 	 * @param string $date
 	 * @param string $contact
 	 *
-	 * @return string|null
+	 * @return string|NULL
 	 * @throws Exception
 	 */
-	static protected function _set_circ_rec($noid, $id, $circ_svec, $date, $contact)
+	static protected function _set_circ_rec($noid, $id, $circ_svec, $date, $contact): string|NULL
 	{
 		$db = Db::getDb($noid);
 		if(is_null($db)){
@@ -1390,7 +1390,7 @@ class Noid{
 	 * @return array|NULL
 	 * @throws Exception
 	 */
-	static protected function _clear_bindings($noid, $id, $verbose)
+	static protected function _clear_bindings($noid, $id, $verbose): array|NULL
 	{
 		$retvals = array();
 
@@ -1430,7 +1430,7 @@ class Noid{
 	 * @return string
 	 * @throws Exception
 	 */
-	static protected function _id2elemval($noid, $verbose, $id, $elem)
+	static protected function _id2elemval($noid, $verbose, $id, $elem): string
 	{
 		$db = Db::getDb($noid);
 		if(is_null($db)){

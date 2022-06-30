@@ -45,7 +45,7 @@ class XmlDB implements DatabaseInterface{
 	/**
 	 * @var string $file_path
 	 */
-	private $file_path;
+	private $file_path = '';
 
 	/**
 	 * @var SimpleXMLElement $handle
@@ -63,17 +63,18 @@ class XmlDB implements DatabaseInterface{
 			throw new Exception('NOID requires the extension "XML" (php-xml).');
 		}
 
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $db_dir
 	 * @param string $mode
 	 *
-	 * @return SimpleXMLElement|FALSE
+	 * @return SimpleXMLElement|bool
 	 * @throws Exception
 	 */
-	public function open($db_dir, $mode)
+	public function open(string $db_dir, string $mode): SimpleXMLElement|bool
 	{
 		$path = $db_dir . DIRECTORY_SEPARATOR . DatabaseInterface::DATABASE_NAME;
 		$this->file_path = $path . DIRECTORY_SEPARATOR . DatabaseInterface::TABLE_NAME . '.' . self::FILE_EXT;
@@ -103,16 +104,17 @@ class XmlDB implements DatabaseInterface{
 	{
 		// well, it's time for saving the database into the disk.
 		$this->handle->asXML($this->file_path);
-		$this->handle = NULL;
+		//$this->handle = NULL;
+		unset($this->handle);
 	}
 
 	/**
 	 * @param string $key
 	 *
-	 * @return string|FALSE
+	 * @return string|bool
 	 * @throws Exception
 	 */
-	public function get($key)
+	public function get(string $key): string|bool
 	{
 		// internally, the encoded key is used.
 		$key = htmlspecialchars($key, ENT_QUOTES | ENT_HTML401);
@@ -135,7 +137,7 @@ class XmlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function set($key, $value)
+	public function set(string $key, string $value): bool
 	{
 		$key = htmlspecialchars($key, ENT_QUOTES | ENT_HTML401);
 		$value = htmlspecialchars($value, ENT_QUOTES | ENT_HTML401);
@@ -164,7 +166,7 @@ class XmlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function delete($key)
+	public function delete(string $key): bool
 	{
 		$key = htmlspecialchars($key, ENT_QUOTES | ENT_HTML401);
 
@@ -188,7 +190,7 @@ class XmlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function exists($key)
+	public function exists(string $key): bool
 	{
 		$key = htmlspecialchars($key, ENT_QUOTES | ENT_HTML401);
 
@@ -209,10 +211,10 @@ class XmlDB implements DatabaseInterface{
 	 *
 	 * @param string $pattern The pattern of the keys to retrieve (no regex).
 	 *
-	 * @return array Ordered associative array of matching keys and values.
+	 * @return array|NULL Ordered associative array of matching keys and values.
 	 * @throws Exception
 	 */
-	public function get_range($pattern)
+	public function get_range(string $pattern): array|NULL
 	{
 		if(is_null($pattern) || !is_object($this->handle)){
 			return NULL;
@@ -258,7 +260,7 @@ class XmlDB implements DatabaseInterface{
 	 * @return bool
 	 * @throws Exception
 	 */
-	public function import($src_db)
+	public function import(DatabaseInterface $src_db): bool
 	{
 		if(is_null($src_db) || is_null($this->handle) || !($this->handle instanceof SimpleXMLElement)){
 			return FALSE;
